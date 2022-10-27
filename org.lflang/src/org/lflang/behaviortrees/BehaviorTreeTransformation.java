@@ -1,0 +1,145 @@
+/*************
+* Copyright (c) 2022, Kiel University.
+*
+* Redistribution and use in source and binary forms, with or without modification,
+* are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+*    this list of conditions and the following disclaimer.
+*
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+*    this list of conditions and the following disclaimer in the documentation
+*    and/or other materials provided with the distribution.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
+* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
+* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
+* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+* ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON 
+* ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+***************/
+package org.lflang.behaviortrees;
+
+import java.util.HashMap;
+
+import org.lflang.lf.BehaviorTree;
+import org.lflang.lf.BehaviorTreeNode;
+import org.lflang.lf.Instantiation;
+import org.lflang.lf.LfFactory;
+import org.lflang.lf.Model;
+import org.lflang.lf.Reactor;
+import org.lflang.lf.Sequence;
+import org.lflang.lf.Task;
+
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+
+/**
+ * BehaviorTree AST transformation.
+ * 
+ * @author{Alexander Schulz-Rosengarten <als@informatik.uni-kiel.de>}
+ */
+public class BehaviorTreeTransformation {
+    
+    // BT node types
+    public enum NodeType {
+        ROOT,
+        ACTION, CONDITION,
+        SEQUENCE, FALLBACK, PARALLEL
+    }
+    
+    public static void transform(Model lfModel) {
+        new BehaviorTreeTransformation().transformAll(lfModel);
+    }
+    
+    static LfFactory LFF = LfFactory.eINSTANCE;
+    
+    private BehaviorTreeTransformation() {
+    }
+    
+    private int nodeNameCounter = 0;
+    
+    private void transformAll(Model lfModel) {
+        var transformed = new HashMap<BehaviorTree, Reactor>();
+        // Transform
+        for (var bt : lfModel.getBtrees()) {
+            transformed.put(bt, transformBTree(bt, lfModel));
+        }
+        // Fix references
+        var instantiations = Lists.newArrayList(Iterators.filter(lfModel.eAllContents(), Instantiation.class));
+        for (var i : instantiations) {
+            if (transformed.containsKey(i.getReactorClass())) {
+                i.setReactorClass(transformed.get(i.getReactorClass()));
+            }
+        }
+        // Remove BTrees
+        lfModel.getBtrees().clear();
+    }
+
+    private Reactor transformBTree(BehaviorTree bt, Model lfModel) {
+        var reactor = LFF.createReactor();
+        reactor.setName(bt.getName());
+        addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
+        lfModel.getReactors().add(reactor);
+        
+        var nodeReactor = transformNode(bt.getRootNode(), lfModel);
+        var instance = LFF.createInstantiation();
+        instance.setReactorClass(nodeReactor);
+        instance.setName("root");
+        reactor.getInstantiations().add(instance);
+        
+        return reactor;
+    }
+    
+    private Reactor transformNode(BehaviorTreeNode node, Model lfModel) {
+        if (node instanceof Sequence) {
+            return transformSequence((Sequence) node, lfModel);
+        } else if (node instanceof Task) {
+            return transformTask((Task) node, lfModel);
+        }
+        return null;
+    }
+    
+    private Reactor transformSequence(Sequence seq, Model lfModel) {
+        var reactor = LFF.createReactor();
+        reactor.setName("Node"+nodeNameCounter++);
+        addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
+        lfModel.getReactors().add(reactor);
+        
+        for (var node : seq.getNodes()) {
+            var nodeReactor = transformNode(node, lfModel);
+            var instance = LFF.createInstantiation();
+            instance.setReactorClass(nodeReactor);
+            instance.setName("node" + seq.getNodes().indexOf(node));
+            reactor.getInstantiations().add(instance);
+        }
+        
+        return reactor;
+    }
+
+    private Reactor transformTask(Task task, Model lfModel) {
+        var reactor = LFF.createReactor();
+        reactor.setName("Node"+nodeNameCounter++);
+        addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
+        lfModel.getReactors().add(reactor);
+        
+        reactor.getReactions().add(task.getReaction());
+        
+        return reactor;
+    }
+    
+    private void addBTNodeAnnotation(Reactor reactor, String type) {
+        var attr = LFF.createAttribute();
+        attr.setAttrName("btnode");
+        var param = LFF.createAttrParm();
+        attr.getAttrParms().add(param);
+        var value = LFF.createAttrParmValue();
+        value.setStr(type);
+        param.setValue(value);
+        reactor.getAttributes().add(attr);
+    }
+}

@@ -56,8 +56,11 @@ Model:
     target=TargetDecl
     (imports+=Import)*
     (preambles+=Preamble)*
-    (reactors+=Reactor)+
-    ;
+    (
+        reactors+=Reactor
+        | btrees+=BehaviorTree
+    )+
+;
 
 /////////// Top level elements
 
@@ -66,7 +69,7 @@ Model:
  */
 Import: 'import' reactorClasses+=ImportedReactor (',' reactorClasses+=ImportedReactor)* 'from' importURI=STRING ';'?;
 
-ReactorDecl: Reactor | ImportedReactor;
+ReactorDecl: Reactor | ImportedReactor | BehaviorTree;
 
 ImportedReactor: reactorClass=[Reactor] ('as' name=ID)?;
 
@@ -109,6 +112,40 @@ TypeExpr:
  */
 TargetDecl:
     'target' name=ID (config=KeyValuePairs)? ';'?;
+    
+/////////// Behavior Trees
+
+/**
+ * Declaration of a behavior tree.
+ */
+BehaviorTree:
+    {BehaviorTree}
+    (attributes+=Attribute)*
+    'btree' (name=ID)?
+    '{'
+    ((inputs+=Input) | (outputs+=Output))* 
+    rootNode=BehaviorTreeNode?
+    '}'
+;
+
+BehaviorTreeNode:
+    Task | Sequence
+;
+
+Task:
+    {Task}
+    'task' '{'
+        reaction=Reaction?
+    '}'
+;
+
+Sequence:
+    {Sequence}
+    'sequence' '{'
+        nodes+=BehaviorTreeNode*
+    '}'
+;
+    
 
 
 /////////// Statements

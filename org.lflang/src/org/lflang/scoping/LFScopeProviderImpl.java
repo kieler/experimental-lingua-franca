@@ -40,6 +40,7 @@ import org.eclipse.xtext.scoping.Scopes;
 import org.eclipse.xtext.scoping.impl.SelectableBasedScope;
 
 import org.lflang.lf.Assignment;
+import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.Connection;
 import org.lflang.lf.Deadline;
 import org.lflang.lf.Import;
@@ -102,6 +103,8 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             return getScopeForReactorDecl(context, reference);
         } else if (context instanceof ImportedReactor) {
             return getScopeForImportedReactor((ImportedReactor) context, reference);
+        } else if (context instanceof BehaviorTree) {
+            return getScopeForReactorDecl(context, reference);
         }
         return super.getScope(context, reference);
     }
@@ -143,6 +146,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
 
         // Collect eligible candidates, all of which are local (i.e., not in other files).
         var locals = new ArrayList<ReactorDecl>(model.getReactors());
+        locals.addAll(model.getBtrees());
 
         // Either point to the import statement (if it is renamed)
         // or directly to the reactor definition.

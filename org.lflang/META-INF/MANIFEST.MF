@@ -24,6 +24,8 @@ Require-Bundle: org.eclipse.xtext,
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Export-Package: org.lflang,
  org.lflang.ast,
+ org.lflang.behaviortrees,
+ org.lflang.formatting2,
  org.lflang.generator,
  org.lflang.generator.c,
  org.lflang.graph,
@@ -36,7 +38,6 @@ Export-Package: org.lflang,
  org.lflang.serializer,
  org.lflang.services,
  org.lflang.util,
- org.lflang.validation,
- org.lflang.formatting2
+ org.lflang.validation
 Import-Package: org.apache.log4j,
  org.eclipse.core.resources
