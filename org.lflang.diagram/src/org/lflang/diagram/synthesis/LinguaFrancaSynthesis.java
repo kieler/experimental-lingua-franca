@@ -65,6 +65,7 @@ import org.eclipse.xtext.xbase.lib.StringExtensions;
 import org.lflang.ASTUtils;
 import org.lflang.AttributeUtils;
 import org.lflang.InferredType;
+import org.lflang.behaviortrees.BehaviorTreeTransformation;
 import org.lflang.diagram.synthesis.action.CollapseAllReactorsAction;
 import org.lflang.diagram.synthesis.action.ExpandAllReactorsAction;
 import org.lflang.diagram.synthesis.action.FilterCycleAction;
@@ -257,11 +258,16 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
     // -------------------------------------------------------------------------
     
     @Override
-    public KNode transform(final Model model) {
+    public KNode transform(Model model) {
         KNode rootNode = _kNodeExtensions.createNode();
         setLayoutOption(rootNode, CoreOptions.ALGORITHM, LayeredOptions.ALGORITHM_ID);
         setLayoutOption(rootNode, CoreOptions.DIRECTION, Direction.RIGHT);
         setLayoutOption(rootNode, CoreOptions.PADDING, new ElkPadding(0));
+        
+        // Transformation before synthesis
+        // FIXME Model copy without source file
+        model = EcoreUtil.copy(model);
+        BehaviorTreeTransformation.transform(model);
 
         try {
             // Find main
@@ -579,6 +585,7 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
             }
             configureReactorNodeLayout(node, false);
             _layoutPostProcessing.configureReactor(node);
+            _btDiagrams.configureBehaviorTreeLayout(node, reactor);
         }
 
         // Find and annotate cycles
@@ -1145,10 +1152,14 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
             }
         }
         if (reactorInstance.isMainOrFederated()) {
-            try {
-                b.append(FileUtil.nameWithoutExtension(reactorInstance.reactorDeclaration.eResource()));
-            } catch (Exception e) {
-                throw Exceptions.sneakyThrow(e);
+            if (reactorInstance.reactorDeclaration.eResource() != null) {
+                try {
+                    b.append(FileUtil.nameWithoutExtension(reactorInstance.reactorDeclaration.eResource()));
+                } catch (Exception e) {
+                    throw Exceptions.sneakyThrow(e);
+                }
+            } else {
+                b.append("Main");
             }
         } else if (reactorInstance.reactorDeclaration == null) {
             // There is an error in the graph.

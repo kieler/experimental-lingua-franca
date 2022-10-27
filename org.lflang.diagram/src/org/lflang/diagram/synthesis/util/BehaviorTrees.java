@@ -24,7 +24,6 @@
 ***************/
 package org.lflang.diagram.synthesis.util;
 
-
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -35,17 +34,18 @@ import org.eclipse.elk.alg.layered.options.FixedAlignment;
 import org.eclipse.elk.alg.layered.options.LayeredOptions;
 import org.eclipse.elk.alg.layered.options.NodePlacementStrategy;
 import org.eclipse.elk.alg.layered.options.OrderingStrategy;
-import org.eclipse.elk.core.math.ElkPadding;
 import org.eclipse.elk.core.options.CoreOptions;
 import org.eclipse.elk.core.options.Direction;
 import org.eclipse.elk.core.options.EdgeRouting;
 import org.eclipse.elk.core.options.SizeConstraint;
 import org.eclipse.xtext.xbase.lib.Extension;
 import org.lflang.AttributeUtils;
+import org.lflang.behaviortrees.BehaviorTreeTransformation.NodeType;
 import org.lflang.diagram.synthesis.AbstractSynthesisExtensions;
 import org.lflang.diagram.synthesis.LinguaFrancaSynthesis;
 import org.lflang.diagram.synthesis.styles.LinguaFrancaStyleExtensions;
 import org.lflang.generator.ReactorInstance;
+import org.lflang.lf.Reactor;
 
 import com.google.inject.Inject;
 
@@ -71,12 +71,6 @@ import de.cau.cs.kieler.klighd.syntheses.DiagramSyntheses;
 @ViewSynthesisShared
 public class BehaviorTrees extends AbstractSynthesisExtensions {
     
-    // BT node type
-    enum NodeType {
-        ACTION, CONDITION,
-        SEQUENCE, FALLBACK, PARALLEL
-    }
-    
     // Related synthesis option
     public static final SynthesisOption SHOW_BT = 
             SynthesisOption.createCheckOption("Detect Behavior Trees", false).setCategory(LinguaFrancaSynthesis.APPEARANCE);
@@ -92,11 +86,11 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
 
     public void handleBehaviorTrees(List<KNode> nodes, ReactorInstance reactor) {
         if (getBooleanValue(SHOW_BT)) {
-            if (getBTNodeType(reactor) != null && getBTNodeType(reactor.getParent()) == null) { // If this is the top most BT node -> transform to tree
+            if (getBTNodeType(reactor) == NodeType.ROOT) { // If this is the top most BT node -> transform to tree
                 // Create new nodes for reactors
                 var btNodes = new LinkedHashMap<ReactorInstance, KNode>(); // New nodes
                 var visit = new LinkedList<ReactorInstance>();
-                visit.add(reactor);
+                visit.addAll(reactor.children);
                 while(!visit.isEmpty()) {
                     var r = visit.pop();
                     var t = getBTNodeType(r);
@@ -123,36 +117,46 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
                 }
                 
                 // Container node
-                var container = _kNodeExtensions.createNode();
-                _kRenderingExtensions.addInvisibleContainerRendering(container);
-                container.getChildren().addAll(btNodes.values()); // Add new content
-                
-                // Layout
-                DiagramSyntheses.setLayoutOption(container, CoreOptions.ALGORITHM, LayeredOptions.ALGORITHM_ID);
-                DiagramSyntheses.setLayoutOption(container, CoreOptions.DIRECTION, Direction.DOWN);
-                DiagramSyntheses.setLayoutOption(container, LayeredOptions.NODE_PLACEMENT_STRATEGY, NodePlacementStrategy.BRANDES_KOEPF);
-                DiagramSyntheses.setLayoutOption(container, LayeredOptions.NODE_PLACEMENT_BK_FIXED_ALIGNMENT, FixedAlignment.BALANCED);
-                DiagramSyntheses.setLayoutOption(container, LayeredOptions.NODE_PLACEMENT_BK_EDGE_STRAIGHTENING, EdgeStraighteningStrategy.IMPROVE_STRAIGHTNESS);
-                DiagramSyntheses.setLayoutOption(container, CoreOptions.EDGE_ROUTING, EdgeRouting.POLYLINE);
-                DiagramSyntheses.setLayoutOption(container, LayeredOptions.CONSIDER_MODEL_ORDER_STRATEGY, OrderingStrategy.NODES_AND_EDGES);
-                DiagramSyntheses.setLayoutOption(container, CoreOptions.PADDING, new ElkPadding(0));
+//                var container = _kNodeExtensions.createNode();
+//                _kRenderingExtensions.addInvisibleContainerRendering(container);
+//                container.getChildren().addAll(btNodes.values()); // Add new content
+//                configureBehaviorTreeLayout(container, reactor.reactorDefinition);
                 
                 // Replace content
                 nodes.clear();
-                nodes.add(container); 
+//                nodes.add(container); 
+                nodes.addAll(btNodes.values()); 
             }
+        }
+    }
+
+    public void configureBehaviorTreeLayout(KNode node, Reactor reactor) {
+        if (getBooleanValue(SHOW_BT) && getBTNodeType(reactor) == NodeType.ROOT) {
+            // Layout
+            DiagramSyntheses.setLayoutOption(node, CoreOptions.ALGORITHM, LayeredOptions.ALGORITHM_ID);
+            DiagramSyntheses.setLayoutOption(node, CoreOptions.DIRECTION, Direction.DOWN);
+            DiagramSyntheses.setLayoutOption(node, LayeredOptions.NODE_PLACEMENT_STRATEGY, NodePlacementStrategy.BRANDES_KOEPF);
+            DiagramSyntheses.setLayoutOption(node, LayeredOptions.NODE_PLACEMENT_BK_FIXED_ALIGNMENT, FixedAlignment.BALANCED);
+            DiagramSyntheses.setLayoutOption(node, LayeredOptions.NODE_PLACEMENT_BK_EDGE_STRAIGHTENING, EdgeStraighteningStrategy.IMPROVE_STRAIGHTNESS);
+            DiagramSyntheses.setLayoutOption(node, CoreOptions.EDGE_ROUTING, EdgeRouting.POLYLINE);
+            DiagramSyntheses.setLayoutOption(node, LayeredOptions.CONSIDER_MODEL_ORDER_STRATEGY, OrderingStrategy.NODES_AND_EDGES);
+//            DiagramSyntheses.setLayoutOption(node, CoreOptions.PADDING, new ElkPadding(0));
         }
     }
     
     private NodeType getBTNodeType(ReactorInstance reactor) {
+        return getBTNodeType(reactor.reactorDefinition);
+    }
+
+    private NodeType getBTNodeType(Reactor reactor) {
         try {
-            var typeName = AttributeUtils.findAttributeByName(reactor.reactorDefinition, "btnode");
+            var typeName = AttributeUtils.findAttributeByName(reactor, "btnode");
             return NodeType.valueOf(typeName.toUpperCase());
         } catch (Exception e) {
             return null;
         }
     }
-    
+
     private KNode createBTNode(ReactorInstance reactor, NodeType type) {
         var node = _kNodeExtensions.createNode();
         DiagramSyntheses.setLayoutOption(node, CoreOptions.NODE_SIZE_CONSTRAINTS, EnumSet.of(SizeConstraint.MINIMUM_SIZE, SizeConstraint.NODE_LABELS));
