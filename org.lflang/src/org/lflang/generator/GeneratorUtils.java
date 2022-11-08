@@ -226,6 +226,7 @@ public class GeneratorUtils {
         // levels.
         for (Reactor reactor : instantiationGraph.nodesInTopologicalOrder()) {
             Resource resource = reactor.eResource();
+            if (resource == null) continue;
             if (visited.contains(resource)) continue;
             visited.add(resource);
             List<Issue> issues = validator.validate(resource, CheckMode.ALL, context.getCancelIndicator());

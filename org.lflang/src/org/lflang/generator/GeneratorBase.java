@@ -55,6 +55,7 @@ import org.lflang.TargetConfig;
 import org.lflang.TargetProperty.CoordinationType;
 import org.lflang.TimeUnit;
 import org.lflang.TimeValue;
+import org.lflang.behaviortrees.BehaviorTreeTransformation;
 import org.lflang.federated.FedASTUtils;
 import org.lflang.federated.FederateInstance;
 import org.lflang.federated.serialization.SupportedSerializers;
@@ -334,6 +335,10 @@ public abstract class GeneratorBase extends AbstractLFValidator {
         // FIXME: Should we do this here? This doesn't make sense for federates the way it is
         // done here.
         copyUserFiles(this.targetConfig, this.fileConfig);
+        
+        // Transform behavior trees
+        // FIXME only works with single LF file
+        transformBehaviorTrees(fileConfig.resource);
 
         // Collect reactors and create an instantiation graph.
         // These are needed to figure out which resources we need
@@ -419,7 +424,14 @@ public abstract class GeneratorBase extends AbstractLFValidator {
             }
         }
     }
-
+    
+    /**
+     * For each involved resource, replace transform behavior trees into reactions.
+     */
+    private void transformBehaviorTrees(Resource r) {
+        BehaviorTreeTransformation.transform((Model) r.getContents().get(0));
+    }
+    
     /**
      * For each involved resource, replace connections with delays with generated delay reactors.
      */

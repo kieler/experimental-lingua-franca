@@ -57,12 +57,14 @@ import org.eclipse.xtext.xbase.lib.IterableExtensions;
 import org.eclipse.xtext.xbase.lib.IteratorExtensions;
 import org.eclipse.xtext.xbase.lib.StringExtensions;
 import org.lflang.ast.ToText;
+import org.lflang.behaviortrees.BehaviorTreeTransformation;
 import org.lflang.generator.CodeMap;
 import org.lflang.generator.GeneratorBase;
 import org.lflang.generator.InvalidSourceException;
 import org.lflang.lf.Action;
 import org.lflang.lf.ActionOrigin;
 import org.lflang.lf.Assignment;
+import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.Code;
 import org.lflang.lf.Connection;
 import org.lflang.lf.Element;
@@ -1714,6 +1716,8 @@ public class ASTUtils {
             return (Reactor) r;
         } else if (r instanceof ImportedReactor) {
             return ((ImportedReactor) r).getReactorClass();
+        } else if (r instanceof BehaviorTree) {
+            return BehaviorTreeTransformation.transformVirtual((BehaviorTree) r);
         }
         return null;
     }

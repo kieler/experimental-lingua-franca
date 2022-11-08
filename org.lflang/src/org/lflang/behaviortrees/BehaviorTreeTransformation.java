@@ -24,7 +24,9 @@
 ***************/
 package org.lflang.behaviortrees;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
@@ -55,6 +57,9 @@ public class BehaviorTreeTransformation {
     public static void transform(Model lfModel) {
         new BehaviorTreeTransformation().transformAll(lfModel);
     }
+    public static Reactor transformVirtual(BehaviorTree bt) {
+        return new BehaviorTreeTransformation().transformBTree(bt, new ArrayList<Reactor>());
+    }
     
     static LfFactory LFF = LfFactory.eINSTANCE;
     
@@ -64,10 +69,11 @@ public class BehaviorTreeTransformation {
     private int nodeNameCounter = 0;
     
     private void transformAll(Model lfModel) {
+        var newReactors = new ArrayList<Reactor>();
         var transformed = new HashMap<BehaviorTree, Reactor>();
         // Transform
         for (var bt : lfModel.getBtrees()) {
-            transformed.put(bt, transformBTree(bt, lfModel));
+            transformed.put(bt, transformBTree(bt, newReactors));
         }
         // Fix references
         var instantiations = Lists.newArrayList(Iterators.filter(lfModel.eAllContents(), Instantiation.class));
@@ -78,15 +84,17 @@ public class BehaviorTreeTransformation {
         }
         // Remove BTrees
         lfModel.getBtrees().clear();
+        // Add new reactors to model
+        lfModel.getReactors().addAll(newReactors);
     }
 
-    private Reactor transformBTree(BehaviorTree bt, Model lfModel) {
+    private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
         var reactor = LFF.createReactor();
+        newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
-        lfModel.getReactors().add(reactor);
         
-        var nodeReactor = transformNode(bt.getRootNode(), lfModel);
+        var nodeReactor = transformNode(bt.getRootNode(), newReactors);
         var instance = LFF.createInstantiation();
         instance.setReactorClass(nodeReactor);
         instance.setName("root");
@@ -95,23 +103,23 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
     
-    private Reactor transformNode(BehaviorTreeNode node, Model lfModel) {
+    private Reactor transformNode(BehaviorTreeNode node, List<Reactor> newReactors) {
         if (node instanceof Sequence) {
-            return transformSequence((Sequence) node, lfModel);
+            return transformSequence((Sequence) node, newReactors);
         } else if (node instanceof Task) {
-            return transformTask((Task) node, lfModel);
+            return transformTask((Task) node, newReactors);
         }
         return null;
     }
     
-    private Reactor transformSequence(Sequence seq, Model lfModel) {
+    private Reactor transformSequence(Sequence seq, List<Reactor> newReactors) {
         var reactor = LFF.createReactor();
+        newReactors.add(reactor);
         reactor.setName("Node"+nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
-        lfModel.getReactors().add(reactor);
         
         for (var node : seq.getNodes()) {
-            var nodeReactor = transformNode(node, lfModel);
+            var nodeReactor = transformNode(node, newReactors);
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
             instance.setName("node" + seq.getNodes().indexOf(node));
@@ -121,13 +129,15 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
 
-    private Reactor transformTask(Task task, Model lfModel) {
+    private Reactor transformTask(Task task, List<Reactor> newReactors) {
         var reactor = LFF.createReactor();
+        newReactors.add(reactor);
         reactor.setName("Node"+nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
-        lfModel.getReactors().add(reactor);
         
-        reactor.getReactions().add(task.getReaction());
+        if (task.getReaction() != null) {
+            reactor.getReactions().add(task.getReaction());
+        }
         
         return reactor;
     }
