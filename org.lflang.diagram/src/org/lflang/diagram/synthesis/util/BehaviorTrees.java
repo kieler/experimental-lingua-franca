@@ -150,7 +150,9 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
 
     private NodeType getBTNodeType(Reactor reactor) {
         try {
-            var typeName = AttributeUtils.findAttributeByName(reactor, "btnode");
+            var typeAttr = AttributeUtils.findAttributeByName(reactor, "btnode");
+            var typeName = typeAttr.getAttrParms().get(0).getValue();
+            if (typeName.startsWith("\"")) typeName = typeName.substring(1, typeName.length() - 1);
             return NodeType.valueOf(typeName.toUpperCase());
         } catch (Exception e) {
             return null;

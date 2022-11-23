@@ -36,6 +36,7 @@ import org.lflang.ASTUtils;
 import org.lflang.TimeUnit;
 import org.lflang.TimeValue;
 import org.lflang.lf.Action;
+import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BuiltinTriggerRef;
 import org.lflang.lf.Port;
 import org.lflang.lf.Reaction;
@@ -167,7 +168,7 @@ public class ReactionInstance extends NamedInstance<Reaction> {
                 if (portInstance != null) {
                     this.effects.add(portInstance);
                     portInstance.dependsOnReactions.add(this);
-                } else {
+                } else if (effect.getContainer() == null || !(effect.getContainer().getReactorClass() instanceof BehaviorTree)) { // FIXME Bad!
                     throw new InvalidSourceException(
                             "Unexpected effect. Cannot find port " + variable.getName());
                 }

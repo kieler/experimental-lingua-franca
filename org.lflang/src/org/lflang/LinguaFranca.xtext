@@ -134,7 +134,7 @@ BehaviorTreeNode:
 
 Task:
     {Task}
-    'task' '{'
+    'action' '{'
         reaction=Reaction?
     '}'
 ;

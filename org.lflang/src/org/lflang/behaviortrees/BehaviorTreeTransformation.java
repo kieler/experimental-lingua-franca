@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
 import org.lflang.lf.Instantiation;
@@ -36,6 +37,8 @@ import org.lflang.lf.Model;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
+import org.lflang.lf.Type;
+import org.lflang.lf.VarRef;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -61,12 +64,35 @@ public class BehaviorTreeTransformation {
         return new BehaviorTreeTransformation().transformBTree(bt, new ArrayList<Reactor>());
     }
     
+    public static void addImplictInterface(BehaviorTree bt) {
+        if (bt.getInputs().isEmpty() && bt.getOutputs().isEmpty()) {
+            var type = LFF.createType();
+            type.setId("bool");
+            
+            var start = LFF.createInput();
+            start.setName("start");
+            start.setType(EcoreUtil.copy(type));
+            bt.getInputs().add(start);
+            
+            var succ = LFF.createOutput();
+            succ.setName("success");
+            succ.setType(EcoreUtil.copy(type));
+            bt.getOutputs().add(succ);
+            
+            var fail = LFF.createOutput();
+            fail.setName("failure");
+            fail.setType(EcoreUtil.copy(type));
+            bt.getOutputs().add(fail);
+        }
+    }
+    
     static LfFactory LFF = LfFactory.eINSTANCE;
     
     private BehaviorTreeTransformation() {
     }
     
-    private int nodeNameCounter = 0;
+    private int seqNameCounter = 0;
+    private int actionNameCounter = 0;
     
     private void transformAll(Model lfModel) {
         var newReactors = new ArrayList<Reactor>();
@@ -80,6 +106,13 @@ public class BehaviorTreeTransformation {
         for (var i : instantiations) {
             if (transformed.containsKey(i.getReactorClass())) {
                 i.setReactorClass(transformed.get(i.getReactorClass()));
+                var container = (Reactor) i.eContainer();
+                var varrefs = Lists.newArrayList(Iterators.filter(container.eAllContents(), VarRef.class));
+                for (var v : varrefs) {
+                    if (v.getContainer() == i) {
+                        v.setVariable(createRef((Reactor) i.getReactorClass(), i, v.getVariable().getName()).getVariable());
+                    }
+                }
             }
         }
         // Remove BTrees
@@ -93,12 +126,26 @@ public class BehaviorTreeTransformation {
         newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
+        addInterface(reactor);
         
         var nodeReactor = transformNode(bt.getRootNode(), newReactors);
         var instance = LFF.createInstantiation();
         instance.setReactorClass(nodeReactor);
         instance.setName("root");
         reactor.getInstantiations().add(instance);
+        
+        var c = LFF.createConnection();
+        c.getLeftPorts().add(createRef(reactor, null, "start"));
+        c.getRightPorts().add(createRef(nodeReactor, instance, "start"));
+        reactor.getConnections().add(c);
+        c = LFF.createConnection();
+        c.getLeftPorts().add(createRef(nodeReactor, instance, "success"));
+        c.getRightPorts().add(createRef(reactor, null, "success"));
+        reactor.getConnections().add(c);
+        c = LFF.createConnection();
+        c.getLeftPorts().add(createRef(nodeReactor, instance, "failure"));
+        c.getRightPorts().add(createRef(reactor, null, "failure"));
+        reactor.getConnections().add(c);
         
         return reactor;
     }
@@ -115,15 +162,43 @@ public class BehaviorTreeTransformation {
     private Reactor transformSequence(Sequence seq, List<Reactor> newReactors) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Node"+nodeNameCounter++);
+        reactor.setName("Sequence"+seqNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
+        addInterface(reactor);
         
+        // children
+        Instantiation last = null;
         for (var node : seq.getNodes()) {
             var nodeReactor = transformNode(node, newReactors);
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
             instance.setName("node" + seq.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
+            
+            if (last == null) {
+                var c = LFF.createConnection();
+                c.getLeftPorts().add(createRef(reactor, null, "start"));
+                c.getRightPorts().add(createRef(nodeReactor, instance, "start"));
+                reactor.getConnections().add(c);
+            } else {
+                var c = LFF.createConnection();
+                c.getLeftPorts().add(createRef((Reactor) last.getReactorClass(), last, "success"));
+                c.getRightPorts().add(createRef(nodeReactor, instance, "start"));
+                reactor.getConnections().add(c);
+            }
+            last = instance;
+        }
+        var c = LFF.createConnection();
+        c.getLeftPorts().add(createRef((Reactor) last.getReactorClass(), last, "success"));
+        c.getRightPorts().add(createRef(reactor, null, "success"));
+        reactor.getConnections().add(c);
+        
+        // merge
+        var merge = LFF.createReaction();
+        reactor.getReactions().add(merge);
+        merge.getEffects().add(createRef(reactor, null, "failure"));
+        for (var i : reactor.getInstantiations()) {
+            merge.getTriggers().add(createRef((Reactor) i.getReactorClass(), i, "failure"));
         }
         
         return reactor;
@@ -132,11 +207,16 @@ public class BehaviorTreeTransformation {
     private Reactor transformTask(Task task, List<Reactor> newReactors) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Node"+nodeNameCounter++);
+        reactor.setName("Action"+actionNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
+        addInterface(reactor);
         
         if (task.getReaction() != null) {
-            reactor.getReactions().add(task.getReaction());
+            var r = EcoreUtil.copy(task.getReaction());
+            reactor.getReactions().add(r);
+            r.getEffects().add(createRef(reactor, null, "success"));
+            r.getEffects().add(createRef(reactor, null, "failure"));
+            r.getTriggers().add(createRef(reactor, null, "start"));
         }
         
         return reactor;
@@ -147,9 +227,42 @@ public class BehaviorTreeTransformation {
         attr.setAttrName("btnode");
         var param = LFF.createAttrParm();
         attr.getAttrParms().add(param);
-        var value = LFF.createAttrParmValue();
-        value.setStr(type);
-        param.setValue(value);
+        param.setValue("\"" + type + "\"");
         reactor.getAttributes().add(attr);
+    }
+    
+    private void addInterface(Reactor r) {
+        var type = LFF.createType();
+        type.setId("bool");
+        
+        var start = LFF.createInput();
+        start.setName("start");
+        start.setType(EcoreUtil.copy(type));
+        r.getInputs().add(start);
+        
+        var succ = LFF.createOutput();
+        succ.setName("success");
+        succ.setType(EcoreUtil.copy(type));
+        r.getOutputs().add(succ);
+        
+        var fail = LFF.createOutput();
+        fail.setName("failure");
+        fail.setType(EcoreUtil.copy(type));
+        r.getOutputs().add(fail);
+    }
+    
+    private VarRef createRef(Reactor r, Instantiation i, String port) {
+        var ref = LFF.createVarRef();
+        if ("start".equals(port)) {
+            ref.setVariable(r.getInputs().get(0));
+        } else if ("success".equals(port)) {
+            ref.setVariable(r.getOutputs().get(0));
+        } else {
+            ref.setVariable(r.getOutputs().get(1));
+        }
+        if (i != null) {
+            ref.setContainer(i);
+        }
+        return ref;
     }
 }
