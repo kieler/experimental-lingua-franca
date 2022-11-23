@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, TU Dresden.
+ * Copyright (c) 2022, TU Dresden.
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -21,15 +21,20 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package org.lflang.cli.tests
+package org.lflang.tests.cli
 
-import junit.framework.Assert.assertEquals
-import junit.framework.AssertionFailedError
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 import org.lflang.LFRuntimeModule
 import org.lflang.LFStandaloneSetup
-import org.lflang.cli.*
-import java.io.*
+import org.lflang.cli.AnsiColors
+import org.lflang.cli.Io
+import org.lflang.cli.LFStandaloneModule
+import org.lflang.cli.Lfc
+import org.lflang.cli.ReportingBackend
+import org.opentest4j.AssertionFailedError
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -111,15 +116,17 @@ class LfcIssueReportingTest {
 
         val stderr = SpyPrintStream()
 
-        val backend = ReportingBackend(Io(err = stderr.ps), AnsiColors(useColors).bold("lfc: "), AnsiColors(useColors), 2)
-        val injector = LFStandaloneSetup(LFRuntimeModule(), LFStandaloneModule(backend))
+        val io = Io(err = stderr.ps)
+        val backend = ReportingBackend(io, AnsiColors(useColors).bold("lfc: "), AnsiColors(useColors), 2)
+        val injector = LFStandaloneSetup(LFRuntimeModule(), LFStandaloneModule(backend, io))
             .createInjectorAndDoEMFRegistration()
         val main = injector.getInstance(Lfc::class.java)
 
         val packageName = loader.packageName.replace('.', '/')
         // relative to root of gradle project
-        val lfFile = Paths.get("test/resources/$packageName/$fileBaseName.lf")
-        val expectedPath = Paths.get("test/resources/$packageName/$fileBaseName.stderr")
+        val basePath = "org.lflang.tests/resources/$packageName/"
+        val lfFile = Paths.get("$basePath/$fileBaseName.lf")
+        val expectedPath = Paths.get("$basePath/$fileBaseName.stderr")
 
         assert(Files.exists(lfFile)) { "Missing test file $lfFile" }
 
