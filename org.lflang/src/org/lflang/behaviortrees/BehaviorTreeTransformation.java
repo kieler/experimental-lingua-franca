@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
 import org.lflang.lf.Instantiation;
@@ -136,7 +137,8 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
         
         if (task.getReaction() != null) {
-            reactor.getReactions().add(task.getReaction());
+            var copyReaction = EcoreUtil.copy(task.getReaction());
+            reactor.getReactions().add(copyReaction);
         }
         
         return reactor;
