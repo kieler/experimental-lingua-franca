@@ -35,6 +35,7 @@ import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
 import org.lflang.lf.Model;
+import org.lflang.lf.Output;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
@@ -142,14 +143,29 @@ public class BehaviorTreeTransformation {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName("Node"+nodeNameCounter++);
+        
         Input startInput = LFF.createInput();
         startInput.setName("start");
-        Type startType = LFF.createType(); // keinen neuen Type erstellen sondern Bool nehmen(vordefiniert prolly)
+        Type startType = LFF.createType(); // mb keinen neuen Type erstellen sondern Bool nehmen(vordefiniert prolly)
         startType.setId("bool");
         startInput.setType(startType);
         reactor.getInputs().add(startInput);
-        addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
         
+        Output successOutput = LFF.createOutput();
+        successOutput.setName("success");
+        Type successType = LFF.createType();
+        successType.setId("bool");
+        successOutput.setType(successType);
+        reactor.getOutputs().add(successOutput);
+        
+        Output failureOutput = LFF.createOutput();
+        failureOutput.setName("success");
+        Type failureType = LFF.createType();
+        failureType.setId("bool");
+        failureOutput.setType(failureType);
+        reactor.getOutputs().add(failureOutput);
+        
+        addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
         if (task.getReaction() != null) {
             var copyReaction = EcoreUtil.copy(task.getReaction());
 //            copyReaction.getTriggers().clear();
