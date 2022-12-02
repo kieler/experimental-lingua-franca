@@ -96,7 +96,7 @@ public class BehaviorTreeTransformation {
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
         /*
          * lieber hier den Input start und
-         * die Outputs success, failure erstellen?
+         * die Outputs success, failure erstellen oder bei Transform Task?
          */
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
