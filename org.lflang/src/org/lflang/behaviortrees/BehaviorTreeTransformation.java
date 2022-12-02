@@ -159,7 +159,7 @@ public class BehaviorTreeTransformation {
         reactor.getOutputs().add(successOutput);
         
         Output failureOutput = LFF.createOutput();
-        failureOutput.setName("success");
+        failureOutput.setName("failure");
         Type failureType = LFF.createType();
         failureType.setId("bool");
         failureOutput.setType(failureType);
@@ -168,9 +168,11 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
         if (task.getReaction() != null) {
             var copyReaction = EcoreUtil.copy(task.getReaction());
-//            copyReaction.getTriggers().clear();
-//            var varrefimpl = LFF.createVarRef().set;
-//            copyReaction.getTriggers().add(start);
+            copyReaction.getTriggers().clear();
+            var varrefimpl = LFF.createVarRef();
+            // varref.setTransition() ?? was macht das
+            varrefimpl.setVariable(startInput);
+            copyReaction.getTriggers().add(varrefimpl);
             reactor.getReactions().add(copyReaction);
         }
         
