@@ -31,12 +31,16 @@ import java.util.List;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
+import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
 import org.lflang.lf.Model;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
+import org.lflang.lf.Type;
+import org.lflang.lf.impl.InputImpl;
+import org.lflang.lf.impl.TypeImpl;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -90,6 +94,10 @@ public class BehaviorTreeTransformation {
     }
 
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
+        /*
+         * lieber hier den Input start und
+         * die Outputs success, failure erstellen?
+         */
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName(bt.getName());
@@ -134,10 +142,19 @@ public class BehaviorTreeTransformation {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName("Node"+nodeNameCounter++);
+        Input startInput = LFF.createInput();
+        startInput.setName("start");
+        Type startType = LFF.createType(); // keinen neuen Type erstellen sondern Bool nehmen(vordefiniert prolly)
+        startType.setId("bool");
+        startInput.setType(startType);
+        reactor.getInputs().add(startInput);
         addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
         
         if (task.getReaction() != null) {
             var copyReaction = EcoreUtil.copy(task.getReaction());
+//            copyReaction.getTriggers().clear();
+//            var varrefimpl = LFF.createVarRef().set;
+//            copyReaction.getTriggers().add(start);
             reactor.getReactions().add(copyReaction);
         }
         
@@ -155,3 +172,6 @@ public class BehaviorTreeTransformation {
         reactor.getAttributes().add(attr);
     }
 }
+
+
+
