@@ -31,18 +31,17 @@ import java.util.List;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
+import org.lflang.lf.Code;
 import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
 import org.lflang.lf.Model;
 import org.lflang.lf.Output;
+import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
 import org.lflang.lf.Type;
-import org.lflang.lf.impl.InputImpl;
-import org.lflang.lf.impl.TypeImpl;
-
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
@@ -99,10 +98,16 @@ public class BehaviorTreeTransformation {
          * lieber hier den Input start und
          * die Outputs success, failure erstellen oder bei Transform Task?
          */
+        
+        
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
+        
+        setBTNodeStartInput(reactor);
+        setBTNodeSuccessOutput(reactor);
+        setBTNodeFailureOutput(reactor);
         
         var nodeReactor = transformNode(bt.getRootNode(), newReactors);
         var instance = LFF.createInstantiation();
@@ -110,6 +115,9 @@ public class BehaviorTreeTransformation {
         instance.setName("root");
         reactor.getInstantiations().add(instance);
         
+//        reactor.getConnections().add(null)
+        // Für Connections: pass auf, dass eContainer auf richtigen
+        // Reactor zeigt. (also der, der die Var trägt
         return reactor;
     }
     
@@ -128,12 +136,37 @@ public class BehaviorTreeTransformation {
         reactor.setName("Node"+nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
         
+        Input startInput = setBTNodeStartInput(reactor);
+        Output successOutput = setBTNodeSuccessOutput(reactor);
+        Output failureOutput = setBTNodeFailureOutput(reactor);
+                
+        List<Reactor> childNodes = new ArrayList<>();
+        
         for (var node : seq.getNodes()) {
             var nodeReactor = transformNode(node, newReactors);
+            childNodes.add(nodeReactor);
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
             instance.setName("node" + seq.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
+        }
+        
+        Reaction reactionFailure = LFF.createReaction();
+        Code failureCode = LFF.createCode();
+        failureCode.setBody("lf_set(failure, true);");
+        reactionFailure.setCode(failureCode);
+        
+        
+        var failureEffect = LFF.createVarRef();
+        failureEffect.setVariable(failureOutput);
+        reactionFailure.getEffects().add(failureEffect);
+        
+        // Wie trigger einstellen? also so, dass trigger von 
+        // instantieerungen sind
+        for (Reactor childReactor : childNodes) {
+            // TODO: kann 
+//            childReactor
+//            var failureTrigger = LFF.createVarRef();
         }
         
         return reactor;
@@ -144,20 +177,53 @@ public class BehaviorTreeTransformation {
         newReactors.add(reactor);
         reactor.setName("Node"+nodeNameCounter++);
         
+        Input startInput = setBTNodeStartInput(reactor);
+        Output successOutput = setBTNodeSuccessOutput(reactor);
+        Output failureOutput = setBTNodeFailureOutput(reactor);
+        
+        addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
+        if (task.getReaction() != null) {
+            var copyReaction = EcoreUtil.copy(task.getReaction());
+            copyReaction.getTriggers().clear();
+            
+            var startTrigger = LFF.createVarRef();
+            // TODO varref.setTransition() ?? was macht das
+            startTrigger.setVariable(startInput);
+            copyReaction.getTriggers().add(startTrigger);
+            
+            var successEffect = LFF.createVarRef();
+            successEffect.setVariable(successOutput);
+            copyReaction.getEffects().add(successEffect);
+
+            var failureEffect = LFF.createVarRef();
+            failureEffect.setVariable(failureOutput);
+            copyReaction.getEffects().add(failureEffect);
+            
+            reactor.getReactions().add(copyReaction);
+        }
+        
+        return reactor;
+    }
+    
+    private Input setBTNodeStartInput(Reactor reactor) {
         Input startInput = LFF.createInput();
         startInput.setName("start");
         Type startType = LFF.createType(); // mb keinen neuen Type erstellen sondern Bool nehmen(vordefiniert prolly)
         startType.setId("bool");
         startInput.setType(startType);
         reactor.getInputs().add(startInput);
-        
+        return startInput;
+    }
+    private Output setBTNodeSuccessOutput(Reactor reactor) {
         Output successOutput = LFF.createOutput();
         successOutput.setName("success");
         Type successType = LFF.createType();
         successType.setId("bool");
         successOutput.setType(successType);
         reactor.getOutputs().add(successOutput);
-        
+        return successOutput;
+    }
+    private Output setBTNodeFailureOutput(Reactor reactor) {
         Output failureOutput = LFF.createOutput();
         failureOutput.setName("failure");
         Type failureType = LFF.createType();
@@ -165,18 +231,7 @@ public class BehaviorTreeTransformation {
         failureOutput.setType(failureType);
         reactor.getOutputs().add(failureOutput);
         
-        addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
-        if (task.getReaction() != null) {
-            var copyReaction = EcoreUtil.copy(task.getReaction());
-            copyReaction.getTriggers().clear();
-            var varrefimpl = LFF.createVarRef();
-            // varref.setTransition() ?? was macht das
-            varrefimpl.setVariable(startInput);
-            copyReaction.getTriggers().add(varrefimpl);
-            reactor.getReactions().add(copyReaction);
-        }
-        
-        return reactor;
+        return failureOutput;
     }
     
     private void addBTNodeAnnotation(Reactor reactor, String type) {
