@@ -38,7 +38,7 @@ import org.eclipse.xtext.naming.SimpleNameProvider;
 import org.eclipse.xtext.scoping.IScope;
 import org.eclipse.xtext.scoping.Scopes;
 import org.eclipse.xtext.scoping.impl.SelectableBasedScope;
-
+import org.lflang.behaviortrees.BehaviorTreeTransformation;
 import org.lflang.lf.Assignment;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.Connection;
@@ -202,17 +202,33 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
 
                 if (instanceName != null) {
                     for (var instance : instances) {
-                        var defn = toDefinition(instance.getReactorClass());
-                        if (defn != null && instance.getName().equals(instanceName.toString())) {
+                        if (instance.getReactorClass() instanceof BehaviorTree && instance.getName().equals(instanceName.toString())) {
+                            var bt = (BehaviorTree) instance.getReactorClass();
+                            // FIXME This causes a side-effect on the model in the scoper, check if this can be improved (e.g. moved to parsing)
+                            BehaviorTreeTransformation.addImplictInterface(bt);
                             switch (type) {
-                            case TRIGGER:
-                            case SOURCE:
-                            case CLEFT:
-                                return Scopes.scopeFor(allOutputs(defn));
-                            case EFFECT:
-                            case DEADLINE:
-                            case CRIGHT:
-                                return Scopes.scopeFor(allInputs(defn));
+                                case TRIGGER:
+                                case SOURCE:
+                                case CLEFT:
+                                    return Scopes.scopeFor(bt.getOutputs());
+                                case EFFECT:
+                                case DEADLINE:
+                                case CRIGHT:
+                                    return Scopes.scopeFor(bt.getInputs());
+                            }
+                        } else {
+                            var defn = toDefinition(instance.getReactorClass());
+                            if (defn != null && instance.getName().equals(instanceName.toString())) {
+                                switch (type) {
+                                case TRIGGER:
+                                case SOURCE:
+                                case CLEFT:
+                                    return Scopes.scopeFor(allOutputs(defn));
+                                case EFFECT:
+                                case DEADLINE:
+                                case CRIGHT:
+                                    return Scopes.scopeFor(allInputs(defn));
+                                }
                             }
                         }
                     }

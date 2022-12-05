@@ -27,6 +27,7 @@ package org.lflang.behaviortrees;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.lflang.lf.BehaviorTree;
@@ -37,11 +38,14 @@ import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
 import org.lflang.lf.Model;
 import org.lflang.lf.Output;
+import org.lflang.lf.Port;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
 import org.lflang.lf.Type;
+import org.lflang.lf.VarRef;
+
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
@@ -59,11 +63,40 @@ public class BehaviorTreeTransformation {
         SEQUENCE, FALLBACK, PARALLEL
     }
     
+    // Interface port names
+    public static String START = "start";
+    public static String SUCCESS = "success";
+    public static String FAILURE = "failure";
+    
     public static void transform(Model lfModel) {
         new BehaviorTreeTransformation().transformAll(lfModel);
     }
     public static Reactor transformVirtual(BehaviorTree bt) {
         return new BehaviorTreeTransformation().transformBTree(bt, new ArrayList<Reactor>());
+    }
+    
+    public static void addImplictInterface(BehaviorTree bt) {
+        var type = LFF.createType();
+        type.setId("bool");
+        
+        if (bt.getInputs().isEmpty() || bt.getInputs().stream().noneMatch(it -> START.equals(it.getName()))) {
+            var start = LFF.createInput();
+            start.setName(START);
+            start.setType(EcoreUtil.copy(type));
+            bt.getInputs().add(start);
+        }
+        if (bt.getOutputs().isEmpty() || bt.getOutputs().stream().noneMatch(it -> SUCCESS.equals(it.getName()))) {
+            var succ = LFF.createOutput();
+            succ.setName(SUCCESS);
+            succ.setType(EcoreUtil.copy(type));
+            bt.getOutputs().add(succ);
+        }
+        if (bt.getOutputs().isEmpty() || bt.getOutputs().stream().noneMatch(it -> FAILURE.equals(it.getName()))) {
+            var fail = LFF.createOutput();
+            fail.setName(FAILURE);
+            fail.setType(EcoreUtil.copy(type));
+            bt.getOutputs().add(fail);
+        }
     }
     
     static LfFactory LFF = LfFactory.eINSTANCE;
@@ -84,7 +117,16 @@ public class BehaviorTreeTransformation {
         var instantiations = Lists.newArrayList(Iterators.filter(lfModel.eAllContents(), Instantiation.class));
         for (var i : instantiations) {
             if (transformed.containsKey(i.getReactorClass())) {
+                // Replace BT by Reactor
                 i.setReactorClass(transformed.get(i.getReactorClass()));
+                // Change VarRefs to Port in reactor instead of BT
+                var container = (Reactor) i.eContainer();
+                var varRefs = Lists.newArrayList(Iterators.filter(container.eAllContents(), VarRef.class));
+                for (var v : varRefs) {
+                    if (v.getContainer() == i) {
+                        v.setVariable(createRef((Reactor) i.getReactorClass(), i, v.getVariable().getName()).getVariable());
+                    }
+                }
             }
         }
         // Remove BTrees
@@ -266,6 +308,30 @@ public class BehaviorTreeTransformation {
         value.setStr(type);
         param.setValue(value);
         reactor.getAttributes().add(attr);
+    }
+
+    private VarRef createRef(Reactor r, Instantiation i, String portName) {
+        var ref = LFF.createVarRef();
+        var port = getPort(r, portName);
+        
+        if (port != null) {
+            ref.setVariable(port);
+            if (i != null) {
+                ref.setContainer(i);
+            }
+            return ref;
+        } else {
+            return null;
+        }
+    }
+
+    private Port getPort(Reactor r, String portName) {
+        var opt = Stream.concat(r.getInputs().stream(), r.getOutputs().stream()).filter(p -> p.getName().equals(portName)).findFirst();
+        if (opt.isPresent()) {
+            return opt.get();
+        } else {
+            return null;
+        }
     }
 }
 

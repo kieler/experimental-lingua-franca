@@ -46,7 +46,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.eclipse.emf.common.util.BasicEList;
 import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.common.util.TreeIterator;
 import org.eclipse.emf.ecore.EAttribute;
@@ -101,6 +100,7 @@ import org.lflang.lf.STP;
 import org.lflang.lf.Serializer;
 import org.lflang.lf.StateVar;
 import org.lflang.lf.TargetDecl;
+import org.lflang.lf.Task;
 import org.lflang.lf.Time;
 import org.lflang.lf.Timer;
 import org.lflang.lf.TriggerRef;
@@ -441,29 +441,31 @@ public class LFValidator extends BaseLFValidator {
 
     @Check(CheckType.FAST)
     public void checkInput(Input input) {
-        Reactor parent = (Reactor)input.eContainer();
-        if (parent.isMain() || parent.isFederated()) {
-            error("Main reactor cannot have inputs.", Literals.VARIABLE__NAME);
-        }
-        checkName(input.getName(), Literals.VARIABLE__NAME);
-        if (target.requiresTypes) {
-            if (input.getType() == null) {
-                error("Input must have a type.", Literals.TYPED_VARIABLE__TYPE);
+        if (input.eContainer() instanceof Reactor) { // FIXME Implement validation for BTs
+            Reactor parent = (Reactor)input.eContainer();
+            if (parent.isMain() || parent.isFederated()) {
+                error("Main reactor cannot have inputs.", Literals.VARIABLE__NAME);
             }
-        }
-
-        // mutable has no meaning in C++
-        if (input.isMutable() && this.target == Target.CPP) {
-            warning(
-                "The mutable qualifier has no meaning for the C++ target and should be removed. " +
-                "In C++, any value can be made mutable by calling get_mutable_copy().",
-                Literals.INPUT__MUTABLE
-            );
-        }
-
-        // Variable width multiports are not supported (yet?).
-        if (input.getWidthSpec() != null && input.getWidthSpec().isOfVariableLength()) {
-            error("Variable-width multiports are not supported.", Literals.PORT__WIDTH_SPEC);
+            checkName(input.getName(), Literals.VARIABLE__NAME);
+            if (target.requiresTypes) {
+                if (input.getType() == null) {
+                    error("Input must have a type.", Literals.TYPED_VARIABLE__TYPE);
+                }
+            }
+    
+            // mutable has no meaning in C++
+            if (input.isMutable() && this.target == Target.CPP) {
+                warning(
+                    "The mutable qualifier has no meaning for the C++ target and should be removed. " +
+                    "In C++, any value can be made mutable by calling get_mutable_copy().",
+                    Literals.INPUT__MUTABLE
+                );
+            }
+    
+            // Variable width multiports are not supported (yet?).
+            if (input.getWidthSpec() != null && input.getWidthSpec().isOfVariableLength()) {
+                error("Variable-width multiports are not supported.", Literals.PORT__WIDTH_SPEC);
+            }
         }
     }
 
@@ -574,20 +576,22 @@ public class LFValidator extends BaseLFValidator {
 
     @Check(CheckType.FAST)
     public void checkOutput(Output output) {
-        Reactor parent = (Reactor)output.eContainer();
-        if (parent.isMain() || parent.isFederated()) {
-            error("Main reactor cannot have outputs.", Literals.VARIABLE__NAME);
-        }
-        checkName(output.getName(), Literals.VARIABLE__NAME);
-        if (this.target.requiresTypes) {
-            if (output.getType() == null) {
-                error("Output must have a type.", Literals.TYPED_VARIABLE__TYPE);
+        if (output.eContainer() instanceof Reactor) { // FIXME Implement validation for BTs
+            Reactor parent = (Reactor)output.eContainer();
+            if (parent.isMain() || parent.isFederated()) {
+                error("Main reactor cannot have outputs.", Literals.VARIABLE__NAME);
             }
-        }
-
-        // Variable width multiports are not supported (yet?).
-        if (output.getWidthSpec() != null && output.getWidthSpec().isOfVariableLength()) {
-            error("Variable-width multiports are not supported.", Literals.PORT__WIDTH_SPEC);
+            checkName(output.getName(), Literals.VARIABLE__NAME);
+            if (this.target.requiresTypes) {
+                if (output.getType() == null) {
+                    error("Output must have a type.", Literals.TYPED_VARIABLE__TYPE);
+                }
+            }
+    
+            // Variable width multiports are not supported (yet?).
+            if (output.getWidthSpec() != null && output.getWidthSpec().isOfVariableLength()) {
+                error("Variable-width multiports are not supported.", Literals.PORT__WIDTH_SPEC);
+            }
         }
     }
 
@@ -696,9 +700,10 @@ public class LFValidator extends BaseLFValidator {
 
     @Check(CheckType.FAST)
     public void checkReaction(Reaction reaction) {
-
-        if (reaction.getTriggers() == null || reaction.getTriggers().size() == 0) {
-            warning("Reaction has no trigger.", Literals.REACTION__TRIGGERS);
+        if (!(reaction.eContainer() instanceof Task)) { // FIXME Implement validation of BTs
+            if (reaction.getTriggers() == null || reaction.getTriggers().size() == 0) {
+                warning("Reaction has no trigger.", Literals.REACTION__TRIGGERS);
+            }
         }
         HashSet<Variable> triggers = new HashSet<>();
         // Make sure input triggers have no container and output sources do.
