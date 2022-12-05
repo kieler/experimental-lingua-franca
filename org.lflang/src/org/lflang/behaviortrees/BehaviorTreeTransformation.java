@@ -91,6 +91,7 @@ public class BehaviorTreeTransformation {
         lfModel.getBtrees().clear();
         // Add new reactors to model
         lfModel.getReactors().addAll(newReactors);
+        
     }
 
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
@@ -105,9 +106,9 @@ public class BehaviorTreeTransformation {
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
         
-        setBTNodeStartInput(reactor);
-        setBTNodeSuccessOutput(reactor);
-        setBTNodeFailureOutput(reactor);
+        var startInput = setBTNodeStartInput(reactor);
+        var successOutput = setBTNodeSuccessOutput(reactor);
+        var failureOutput = setBTNodeFailureOutput(reactor);
         
         var nodeReactor = transformNode(bt.getRootNode(), newReactors);
         var instance = LFF.createInstantiation();
@@ -115,9 +116,31 @@ public class BehaviorTreeTransformation {
         instance.setName("root");
         reactor.getInstantiations().add(instance);
         
+        
+        // get startInput of rootNode of BT (TODO find efficient way)
+        // cant just do: get(0) cause later inoutput
+        Input findInput = null;
+        for (Input input : nodeReactor.getInputs()) {
+            if (input.getName().equals("start")) {
+                findInput = input;
+            }
+        }
+        
 //        reactor.getConnections().add(null)
         // Für Connections: pass auf, dass eContainer auf richtigen
         // Reactor zeigt. (also der, der die Var trägt
+        var connection = LFF.createConnection();
+        
+        var varrefstartInput = LFF.createVarRef();
+        varrefstartInput.setVariable(startInput);
+        connection.getLeftPorts().add(varrefstartInput);
+        
+        var varreffindInput = LFF.createVarRef();
+        varreffindInput.setVariable(findInput);
+        connection.getRightPorts().add(varreffindInput);
+        
+        reactor.getConnections().add(connection);
+        
         return reactor;
     }
     
