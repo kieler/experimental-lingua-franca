@@ -131,8 +131,12 @@ public class BehaviorTreeTransformation {
         }
         // Remove BTrees
         lfModel.getBtrees().clear();
+        int a = 1;
+        int b = 2;
         // Add new reactors to model
         lfModel.getReactors().addAll(newReactors);
+        int c = 3;
+        int d = 4;
         
     }
 
@@ -148,9 +152,9 @@ public class BehaviorTreeTransformation {
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
         
-        var startInput = setBTNodeStartInput(reactor);
-        var successOutput = setBTNodeSuccessOutput(reactor);
-        var failureOutput = setBTNodeFailureOutput(reactor);
+        setBTNodeStartInput(reactor);
+        setBTNodeSuccessOutput(reactor);
+        setBTNodeFailureOutput(reactor);
         
         var nodeReactor = transformNode(bt.getRootNode(), newReactors);
         var instance = LFF.createInstantiation();
@@ -161,27 +165,61 @@ public class BehaviorTreeTransformation {
         
         // get startInput of rootNode of BT (TODO find efficient way)
         // cant just do: get(0) cause later inoutput
-        Input findInput = null;
-        for (Input input : nodeReactor.getInputs()) {
-            if (input.getName().equals("start")) {
-                findInput = input;
-            }
-        }
-        
+//        Input findInput = null;
+//        for (Input input : nodeReactor.getInputs()) {
+//            if (input.getName().equals("start")) {
+//                findInput = input;
+//            }
+//        }
+//        
 //        reactor.getConnections().add(null)
         // Für Connections: pass auf, dass eContainer auf richtigen
         // Reactor zeigt. (also der, der die Var trägt
         var connection = LFF.createConnection();
+
+        var varRefStartInput2 = createRef(reactor, null, START);
+        connection.getLeftPorts().add(varRefStartInput2);
         
-        var varrefstartInput = LFF.createVarRef();
-        varrefstartInput.setVariable(startInput);
-        connection.getLeftPorts().add(varrefstartInput);
-        
-        var varreffindInput = LFF.createVarRef();
-        varreffindInput.setVariable(findInput);
-        connection.getRightPorts().add(varreffindInput);
+        var varRefTask1 = createRef(nodeReactor, instance, START);
+        connection.getRightPorts().add(varRefTask1);
         
         reactor.getConnections().add(connection);
+
+        
+        var connection2 = LFF.createConnection();
+        
+        var varRefSuccessOutputReactor = createRef(nodeReactor, instance, SUCCESS);
+        connection2.getLeftPorts().add(varRefSuccessOutputReactor);
+        
+        var varRefSuccessOutput = createRef(reactor, null, SUCCESS);
+        connection2.getRightPorts().add(varRefSuccessOutput);
+        
+        reactor.getConnections().add(connection2);
+        
+        
+        var connection3 = LFF.createConnection();
+        
+        var varRefFailureOutputReactor = createRef(nodeReactor, instance, FAILURE);
+        connection3.getLeftPorts().add(varRefFailureOutputReactor);
+        
+        var varRefFailureOutput = createRef(reactor, null, FAILURE);
+        connection3.getRightPorts().add(varRefFailureOutput);
+        
+        reactor.getConnections().add(connection3);
+        
+        
+        // this code for sequence
+//        var failureReaction = LFF.createReaction();
+//        var failureCode = LFF.createCode();
+//        failureCode.setBody("lf_set(failure, true);");
+//        failureReaction.setCode(failureCode);
+//        var failureTrigger = createRef(nodeReactor, instance, FAILURE);
+//        var failureEffect = createRef(reactor, null, FAILURE);
+//        
+//        failureReaction.getTriggers().add(failureTrigger);
+//        failureReaction.getEffects().add(failureEffect);
+//        
+//        reactor.getReactions().add(failureReaction);
         
         return reactor;
     }
@@ -204,17 +242,6 @@ public class BehaviorTreeTransformation {
         Input startInput = setBTNodeStartInput(reactor);
         Output successOutput = setBTNodeSuccessOutput(reactor);
         Output failureOutput = setBTNodeFailureOutput(reactor);
-                
-        List<Reactor> childNodes = new ArrayList<>();
-        
-        for (var node : seq.getNodes()) {
-            var nodeReactor = transformNode(node, newReactors);
-            childNodes.add(nodeReactor);
-            var instance = LFF.createInstantiation();
-            instance.setReactorClass(nodeReactor);
-            instance.setName("node" + seq.getNodes().indexOf(node));
-            reactor.getInstantiations().add(instance);
-        }
         
         Reaction reactionFailure = LFF.createReaction();
         Code failureCode = LFF.createCode();
@@ -222,17 +249,77 @@ public class BehaviorTreeTransformation {
         reactionFailure.setCode(failureCode);
         
         
-        var failureEffect = LFF.createVarRef();
-        failureEffect.setVariable(failureOutput);
+//        var failureEffect = LFF.createVarRef();
+//        failureEffect.setVariable(failureOutput);
+//        reactionFailure.getEffects().add(failureEffect);
+        
+        var failureEffect = createRef(reactor, null, FAILURE);
         reactionFailure.getEffects().add(failureEffect);
+        
+        
+        int i = 0;
+        Reactor lastReactor = reactor;
+        Instantiation lastInstantiation = null;
+        for (var node : seq.getNodes()) {
+            var nodeReactor = transformNode(node, newReactors);
+            // Instantiations
+            var instance = LFF.createInstantiation();
+            instance.setReactorClass(nodeReactor);
+            instance.setName("node" + seq.getNodes().indexOf(node));
+            reactor.getInstantiations().add(instance);
+            // Failure
+            var failureTrigger = createRef(nodeReactor, instance, FAILURE);
+            reactionFailure.getTriggers().add(failureTrigger);
+            
+            // Connections
+            if (i == 0) {
+                var initConnection = LFF.createConnection();
+                
+                var initConnectionFrom = createRef(reactor, null, START);
+                initConnection.getLeftPorts().add(initConnectionFrom);
+                
+                var initConnectionTo = createRef(nodeReactor, instance, START);
+                initConnection.getRightPorts().add(initConnectionTo);
+                
+                reactor.getConnections().add(initConnection);
+            } else if (i < seq.getNodes().size()) {
+                var connection = LFF.createConnection();
+                
+                var connFromVarRef = createRef(lastReactor, lastInstantiation, SUCCESS);
+                connection.getLeftPorts().add(connFromVarRef);
+                
+                var connToVarRef = createRef(nodeReactor, instance, START);
+                connection.getRightPorts().add(connToVarRef);
+                
+                reactor.getConnections().add(connection);
+            }
+            
+            lastReactor = nodeReactor;
+            lastInstantiation = instance;
+            i++;
+        }
+        
+        var successConnection = LFF.createConnection();
+        
+        var successFromVarRef = createRef(lastReactor, lastInstantiation, SUCCESS);
+        successConnection.getLeftPorts().add(successFromVarRef);
+        
+        var successToVarRef = createRef(reactor, null, SUCCESS);
+        successConnection.getRightPorts().add(successToVarRef);
+        
+        reactor.getConnections().add(successConnection);
+        
+        
         
         // Wie trigger einstellen? also so, dass trigger von 
         // instantieerungen sind
-        for (Reactor childReactor : childNodes) {
-            // TODO: kann 
-//            childReactor
-//            var failureTrigger = LFF.createVarRef();
-        }
+//        int i = 0;
+//        for (Reactor childReactor : childNodes) {
+//            var failureTrigger = createRef(childReactor, reactor.getInstantiations().get(i), FAILURE);
+//            i++;
+//            reactionFailure.getTriggers().add(failureTrigger);
+//        }
+        reactor.getReactions().add(reactionFailure);
         
         return reactor;
     }
