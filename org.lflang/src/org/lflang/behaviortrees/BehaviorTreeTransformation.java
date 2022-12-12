@@ -161,36 +161,28 @@ public class BehaviorTreeTransformation {
         instance.setName("root");
         reactor.getInstantiations().add(instance);
 
-        var connStart = LFF.createConnection();
-
-        var conFrom = createRef(reactor, null, START);
-        connStart.getLeftPorts().add(conFrom);
-
-        var conTo = createRef(nodeReactor, instance, START);
-        connStart.getRightPorts().add(conTo);
-
+//        var connStart = LFF.createConnection();
+//        var conFrom = createRef(reactor, null, START);
+//        connStart.getLeftPorts().add(conFrom);
+//        var conTo = createRef(nodeReactor, instance, START);
+//        connStart.getRightPorts().add(conTo);
+        var connStart = createConn(reactor, null, START, nodeReactor, instance, START);
         reactor.getConnections().add(connStart);
 
-        var connSuccess = LFF.createConnection();
-
-        var conFrom2 = createRef(nodeReactor, instance,
-                SUCCESS);
-        connSuccess.getLeftPorts().add(conFrom2);
-
-        var conTo2 = createRef(reactor, null, SUCCESS);
-        connSuccess.getRightPorts().add(conTo2);
-
+//        var connSuccess = LFF.createConnection();
+//        var conFrom2 = createRef(nodeReactor, instance, SUCCESS);
+//        connSuccess.getLeftPorts().add(conFrom2);
+//        var conTo2 = createRef(reactor, null, SUCCESS);
+//        connSuccess.getRightPorts().add(conTo2);
+        var connSuccess = createConn(nodeReactor, instance, SUCCESS, reactor, null, SUCCESS);
         reactor.getConnections().add(connSuccess);
 
-        var connFailure = LFF.createConnection();
-
-        var conFrom3 = createRef(nodeReactor, instance,
-                FAILURE);
-        connFailure.getLeftPorts().add(conFrom3);
-
-        var conTo3 = createRef(reactor, null, FAILURE);
-        connFailure.getRightPorts().add(conTo3);
-
+//        var connFailure = LFF.createConnection();
+//        var conFrom3 = createRef(nodeReactor, instance, FAILURE);
+//        connFailure.getLeftPorts().add(conFrom3);
+//        var conTo3 = createRef(reactor, null, FAILURE);
+//        connFailure.getRightPorts().add(conTo3);
+        var connFailure = createConn(nodeReactor, instance, FAILURE, reactor, null, FAILURE);
         reactor.getConnections().add(connFailure);
 
         return reactor;
@@ -241,28 +233,25 @@ public class BehaviorTreeTransformation {
 
             // Connections
             if (i == 0) {
-                // sequence will first forward the start signal to the first task
-                var initConnection = LFF.createConnection();
-
-                var initConnectionFrom = createRef(reactor, null, START);
-                initConnection.getLeftPorts().add(initConnectionFrom);
-
-                var initConnectionTo = createRef(nodeReactor, instance, START);
-                initConnection.getRightPorts().add(initConnectionTo);
-
-                reactor.getConnections().add(initConnection);
+                // sequence will first forward the start signal to the first
+                // task
+//                var initConnection = LFF.createConnection();
+//                var initConnectionFrom = createRef(reactor, null, START);
+//                initConnection.getLeftPorts().add(initConnectionFrom);
+//                var initConnectionTo = createRef(nodeReactor, instance, START);
+//                initConnection.getRightPorts().add(initConnectionTo);
+                var connStart = createConn(reactor, null, START, nodeReactor, instance, START);
+                reactor.getConnections().add(connStart);
             } else if (i < seq.getNodes().size()) {
                 // connect the tasks
-                var connection = LFF.createConnection();
-
-                var connFromVarRef = createRef(lastReactor, lastInstantiation,
-                        SUCCESS);
-                connection.getLeftPorts().add(connFromVarRef);
-
-                var connToVarRef = createRef(nodeReactor, instance, START);
-                connection.getRightPorts().add(connToVarRef);
-
-                reactor.getConnections().add(connection);
+//                var connection = LFF.createConnection();
+//                var connFromVarRef = createRef(lastReactor, lastInstantiation,
+//                        SUCCESS);
+//                connection.getLeftPorts().add(connFromVarRef);
+//                var connToVarRef = createRef(nodeReactor, instance, START);
+//                connection.getRightPorts().add(connToVarRef);
+                var connForward = createConn(lastReactor, lastInstantiation, SUCCESS, nodeReactor, instance, START);
+                reactor.getConnections().add(connForward);
             }
 
             lastReactor = nodeReactor;
@@ -270,16 +259,14 @@ public class BehaviorTreeTransformation {
             i++;
         }
         // if last tasks output success, then sequence will output success
-        var successConnection = LFF.createConnection();
-
-        var successFromVarRef = createRef(lastReactor, lastInstantiation,
-                SUCCESS);
-        successConnection.getLeftPorts().add(successFromVarRef);
-
-        var successToVarRef = createRef(reactor, null, SUCCESS);
-        successConnection.getRightPorts().add(successToVarRef);
-
-        reactor.getConnections().add(successConnection);
+//        var successConnection = LFF.createConnection();
+//        var successFromVarRef = createRef(lastReactor, lastInstantiation,
+//                SUCCESS);
+//        successConnection.getLeftPorts().add(successFromVarRef);
+//        var successToVarRef = createRef(reactor, null, SUCCESS);
+//        successConnection.getRightPorts().add(successToVarRef);
+        var connSuccess = createConn(lastReactor, lastInstantiation, SUCCESS, reactor, null, SUCCESS);
+        reactor.getConnections().add(connSuccess);
 
         reactor.getReactions().add(reactionFailure);
 
@@ -318,6 +305,27 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
 
+    private Connection createConn(Reactor leftR, Instantiation leftI,
+            String leftPortName, Reactor rightR, Instantiation rightI,
+            String rightPortName) {
+//      var connStart = LFF.createConnection();
+//      var conFrom = createRef(reactor, null, START);
+//      connStart.getLeftPorts().add(conFrom);
+//      var conTo = createRef(nodeReactor, instance, START);
+//      connStart.getRightPorts().add(conTo);
+        var connection = LFF.createConnection();
+        var leftVarRef = createRef(leftR, leftI, leftPortName);
+        var rightVarRef = createRef(rightR, rightI, rightPortName);
+
+        connection.getLeftPorts().add(leftVarRef);
+
+        connection.getRightPorts().add(rightVarRef);
+
+        return connection;
+    }
+
+    
+    
     private Input setBTNodeStartInput(Reactor reactor) {
         Input startInput = LFF.createInput();
         startInput.setName("start");
