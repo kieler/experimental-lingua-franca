@@ -129,12 +129,13 @@ BehaviorTree:
 ;
 
 BehaviorTreeNode:
-    Task | Sequence
+    Task | Sequence | Fallback
 ;
 
 Task:
     {Task}
-    'task' '{'
+//    (attributes+=Attribute)*
+    ('task'|'action'|condition?='condition') (taskName=STRING)? '{'
         reaction=Reaction?
     '}'
 ;
@@ -146,6 +147,15 @@ Sequence:
     '}'
 ;
     
+
+Fallback:
+    {Fallback}
+    'fallback' '{'
+        nodes+=BehaviorTreeNode*
+    '}'    
+;
+
+
 
 
 /////////// Statements

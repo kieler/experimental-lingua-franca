@@ -35,6 +35,7 @@ import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
 import org.lflang.lf.Code;
 import org.lflang.lf.Connection;
+import org.lflang.lf.Fallback;
 import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
@@ -182,6 +183,8 @@ public class BehaviorTreeTransformation {
             return transformSequence((Sequence) node, newReactors);
         } else if (node instanceof Task) {
             return transformTask((Task) node, newReactors);
+        } else if (node instanceof Fallback) {
+            return transformFallback((Fallback) node, newReactors);
         }
         return null;
     }
@@ -245,15 +248,83 @@ public class BehaviorTreeTransformation {
 
         return reactor;
     }
+    
+    private Reactor transformFallback(Fallback fb, List<Reactor> newReactors) {
+        var reactor = LFF.createReactor();
+        newReactors.add(reactor);
+        reactor.setName("Node" + nodeNameCounter++);
+        addBTNodeAnnotation(reactor, NodeType.FALLBACK.toString());
+
+        setBTInterface(reactor);
+
+        // reaction will output failure, if any child produces failure
+        Reaction reactionSuccess = LFF.createReaction();
+        Code successCode = LFF.createCode();
+        successCode.setBody("lf_set(success, true);");
+        reactionSuccess.setCode(successCode);
+
+        var successEffect = createRef(reactor, null, SUCCESS);
+        reactionSuccess.getEffects().add(successEffect);
+
+        int i = 0;
+        Reactor lastReactor = reactor;
+        Instantiation lastInstantiation = null;
+        for (var node : fb.getNodes()) {
+            var nodeReactor = transformNode(node, newReactors);
+            // instantiate child
+            var instance = LFF.createInstantiation();
+            instance.setReactorClass(nodeReactor);
+            instance.setName("node" + fb.getNodes().indexOf(node));
+            reactor.getInstantiations().add(instance);
+            // add current childs success output as success output of
+            // sequence reactor
+            var successTrigger = createRef(nodeReactor, instance, SUCCESS);
+            reactionSuccess.getTriggers().add(successTrigger);
+
+            // Connections
+            if (i == 0) {
+                // sequence will first forward the start signal to the first
+                // task
+                var connStart = createConn(reactor, null, START, nodeReactor,
+                        instance, START);
+                reactor.getConnections().add(connStart);
+            } else if (i < fb.getNodes().size()) {
+                // if non-last task was successfull start next task 
+                var connForward = createConn(lastReactor, lastInstantiation,
+                        FAILURE, nodeReactor, instance, START);
+                reactor.getConnections().add(connForward);
+            }
+
+            lastReactor = nodeReactor;
+            lastInstantiation = instance;
+            i++;
+        }
+        // if last tasks output failure, then fallback will output failure
+        var connFailure = createConn(lastReactor, lastInstantiation, FAILURE,
+                reactor, null, FAILURE);
+        reactor.getConnections().add(connFailure);
+
+        reactor.getReactions().add(reactionSuccess);
+
+        return reactor;
+    }
 
     private Reactor transformTask(Task task, List<Reactor> newReactors) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Node" + nodeNameCounter++);
-
+        
+        String nameOfTask = task.getTaskName() == null ? 
+                                "Node" + (nodeNameCounter++) :
+                                 task.getTaskName();
+        reactor.setName(nameOfTask);
+        
+        String btNodeAnnot = task.isCondition() ?
+                               NodeType.CONDITION.toString() :
+                               NodeType.ACTION.toString();
+        addBTNodeAnnotation(reactor, btNodeAnnot);
+        
         setBTInterface(reactor);
 
-        addBTNodeAnnotation(reactor, NodeType.ACTION.toString());
         if (task.getReaction() != null) {
             var copyReaction = EcoreUtil.copy(task.getReaction());
             // workaround TODO keine reaction und trigger vom user angeben
