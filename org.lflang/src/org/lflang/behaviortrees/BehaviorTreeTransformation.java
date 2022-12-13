@@ -324,23 +324,23 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, btNodeAnnot);
         
         setBTInterface(reactor);
-
-        if (task.getReaction() != null) {
-            var copyReaction = EcoreUtil.copy(task.getReaction());
-            // workaround TODO keine reaction und trigger vom user angeben
-            copyReaction.getTriggers().clear();
+        
+        var reaction = LFF.createReaction();
+        if (task.getCode() != null) {
+//            reaction.setCode(task.getCode()); makes code go null
+            var copyCode = EcoreUtil.copy(task.getCode());
+            reaction.setCode(copyCode);
             
-            // add triggers and effects to the task
             var startTrigger = createRef(reactor, null, START);
-            copyReaction.getTriggers().add(startTrigger);
+            reaction.getTriggers().add(startTrigger);
 
             var successEffect = createRef(reactor, null, SUCCESS);
-            copyReaction.getEffects().add(successEffect);
+            reaction.getEffects().add(successEffect);
 
             var failureEffect = createRef(reactor, null, FAILURE);
-            copyReaction.getEffects().add(failureEffect);
+            reaction.getEffects().add(failureEffect);
 
-            reactor.getReactions().add(copyReaction);
+            reactor.getReactions().add(reaction);
         }
 
         return reactor;
