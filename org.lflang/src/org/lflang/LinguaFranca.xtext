@@ -125,7 +125,7 @@ BehaviorTree:
     '{'
     ((inputs+=Input) | (outputs+=Output))* 
     rootNode=BehaviorTreeNode?
-    '}'
+    '}'                                            
 ;
 
 BehaviorTreeNode:
@@ -135,18 +135,20 @@ BehaviorTreeNode:
 Task:
     {Task}
 //    (attributes+=Attribute)*
-    ('task'|'action'|condition?='condition') (taskName=STRING)?
-        code=Code
+    ('task'|'action'|condition?='condition')
+        (taskName=STRING)?
+        (taskSources+=VarRef (',' taskSources+=VarRef)*)?
+    code=Code
 ;
-//TaskReaction:
-//    (attributes+=Attribute)*
-//    (('reaction') | mutation ?= 'mutation')
-//    ('(' (triggers+=TriggerRef (',' triggers+=TriggerRef)*)? ')')?
-//    (sources+=VarRef (',' sources+=VarRef)*)?
-//    ('->' effects+=VarRefOrModeTransition (',' effects+=VarRefOrModeTransition)*)?
+//Task:
+//    {Task}
+////    (attributes+=Attribute)*
+//    ('task'|'action'|condition?='condition')
+//        (taskName=STRING)?
+//        (taskSources+=STRING (',' taskSources+=STRING)*)?
 //    code=Code
-//    (stp=STP)?
-//    (deadline=Deadline)?;
+//;
+
     
 //Code:
 //    //{Code} '{=' (tokens+=Token)* '=}'

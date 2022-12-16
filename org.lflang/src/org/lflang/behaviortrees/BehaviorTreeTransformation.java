@@ -48,6 +48,7 @@ import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
 import org.lflang.lf.Type;
 import org.lflang.lf.VarRef;
+import org.lflang.lf.Variable;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -63,7 +64,7 @@ public class BehaviorTreeTransformation {
     public enum NodeType {
         ROOT, ACTION, CONDITION, SEQUENCE, FALLBACK, PARALLEL
     }
-
+    
     // Interface port names
     public static String START = "start";
     public static String SUCCESS = "success";
@@ -138,24 +139,37 @@ public class BehaviorTreeTransformation {
                 }
             }
         }
+        
         // Remove BTrees
         lfModel.getBtrees().clear();
         // Add new reactors to model
         lfModel.getReactors().addAll(newReactors);
 
     }
-
+    
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
+        var fwdInputs = new HashMap<Reactor, ArrayList<String>>();
 
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
-        setBTInterface(reactor);
+//        setBTInterface(reactor);
+//        var inputsBT = new ArrayList<Input>();
+        
+        for(Input input : bt.getInputs()) {
+            var copyInput = EcoreUtil.copy(input);
+            reactor.getInputs().add(copyInput);
+//            inputsBT.add(input);
+        }
+        for (Output output : bt.getOutputs()) {
+            var copyOutput = EcoreUtil.copy(output);
+            reactor.getOutputs().add(copyOutput);
+        }
 
         // Transform BT root
-        var nodeReactor = transformNode(bt.getRootNode(), newReactors);
+        var nodeReactor = transformNode(bt.getRootNode(), newReactors, reactor);
         var instance = LFF.createInstantiation();
         instance.setReactorClass(nodeReactor);
         instance.setName("root");
@@ -173,23 +187,46 @@ public class BehaviorTreeTransformation {
         var connFailure = createConn(nodeReactor, instance, FAILURE, reactor,
                 null, FAILURE);
         reactor.getConnections().add(connFailure);
-
+        
+//        addBTInputConnections(reactor, newReactors);
+        
         return reactor;
     }
+    // 1. Möglichkeit: Liste von Instantierungen weitergeben (oder als field)
+    //     -> Problem, was wenn mehrere Reaktoren einen anderen instantiieren
+    // 2. Möglichkeit: methode, die BT durchgeht und alle nodes abcheckt, ob die input haben wollen
+    //        -> ineffizient
+    // 3. Möglichkeit: Liste von Inputs durch ganze Transformation ziehen (oder als field)
+    //         -> wie dann an BTroot methode die initierungen geben
+    // 4. Möglichkeit: Liste von Connections
+    //          -> gib root Reactor weiter, dann braucht man auch keinen extra parameter (aber keine instantierungen)
+    // TODO: var fwdInputs = new HashMap<Reactor, ArrayList<String>>();
+    //      und in schon geschriebenen Code hier die Instantierungen durch root durchgehen machen
+    //       ODER fwdInputs = new HashMap<HashMap<Reactor, Instant>, ArrayList<String>>();
+//    private void addBTInputConnections(Reactor rootNode, List<Reactor> newReactors) {
+//        for (Input input : rootNode.getInputs()) {
+//            for (Reactor r : newReactors) {
+//                if (!r.equals(rootNode) && inputExistent(r, input.getName())) {
+//                    var fwdInput = createConn(rootNode, null, START, r, null, FAILURE)
+//              PROBLEM: keine Instantierungen mehr vorhanden
+//                }
+//            }       
+//        }
+//        
+//    }
 
-    private Reactor transformNode(BehaviorTreeNode node,
-            List<Reactor> newReactors) {
+    private Reactor transformNode(BehaviorTreeNode node, List<Reactor> newReactors, Reactor rootReactor) {
         if (node instanceof Sequence) {
-            return transformSequence((Sequence) node, newReactors);
+            return transformSequence((Sequence) node, newReactors, rootReactor);
         } else if (node instanceof Task) {
             return transformTask((Task) node, newReactors);
         } else if (node instanceof Fallback) {
-            return transformFallback((Fallback) node, newReactors);
+            return transformFallback((Fallback) node, newReactors, rootReactor);
         }
         return null;
     }
 
-    private Reactor transformSequence(Sequence seq, List<Reactor> newReactors) {
+    private Reactor transformSequence(Sequence seq, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName("Node" + nodeNameCounter++);
@@ -210,7 +247,7 @@ public class BehaviorTreeTransformation {
         Reactor lastReactor = reactor;
         Instantiation lastInstantiation = null;
         for (var node : seq.getNodes()) {
-            var nodeReactor = transformNode(node, newReactors);
+            var nodeReactor = transformNode(node, newReactors, rootReactor);
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
@@ -229,7 +266,7 @@ public class BehaviorTreeTransformation {
                         instance, START);
                 reactor.getConnections().add(connStart);
             } else if (i < seq.getNodes().size()) {
-                // if non-last task was successfull start next task 
+                // if non-last task was successful start next task 
                 var connForward = createConn(lastReactor, lastInstantiation,
                         SUCCESS, nodeReactor, instance, START);
                 reactor.getConnections().add(connForward);
@@ -249,7 +286,7 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
     
-    private Reactor transformFallback(Fallback fb, List<Reactor> newReactors) {
+    private Reactor transformFallback(Fallback fb, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName("Node" + nodeNameCounter++);
@@ -270,13 +307,13 @@ public class BehaviorTreeTransformation {
         Reactor lastReactor = reactor;
         Instantiation lastInstantiation = null;
         for (var node : fb.getNodes()) {
-            var nodeReactor = transformNode(node, newReactors);
+            var nodeReactor = transformNode(node, newReactors, rootReactor);
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
             instance.setName("node" + fb.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
-            // add current childs success output as success output of
+            // add current child success output as success output of
             // sequence reactor
             var successTrigger = createRef(nodeReactor, instance, SUCCESS);
             reactionSuccess.getTriggers().add(successTrigger);
@@ -289,7 +326,7 @@ public class BehaviorTreeTransformation {
                         instance, START);
                 reactor.getConnections().add(connStart);
             } else if (i < fb.getNodes().size()) {
-                // if non-last task was successfull start next task 
+                // if non-last task was successful start next task 
                 var connForward = createConn(lastReactor, lastInstantiation,
                         FAILURE, nodeReactor, instance, START);
                 reactor.getConnections().add(connForward);
@@ -325,12 +362,18 @@ public class BehaviorTreeTransformation {
         
         setBTInterface(reactor);
         
+        for (VarRef varref : task.getTaskSources()) {
+            // put it into input
+            Variable variable = EcoreUtil.copy(varref.getVariable());
+            reactor.getInputs().add((Input) variable);
+        }
+        
         var reaction = LFF.createReaction();
         if (task.getCode() != null) {
 //            reaction.setCode(task.getCode()); makes code go null
             var copyCode = EcoreUtil.copy(task.getCode());
             reaction.setCode(copyCode);
-            
+             
             var startTrigger = createRef(reactor, null, START);
             reaction.getTriggers().add(startTrigger);
 
@@ -340,6 +383,11 @@ public class BehaviorTreeTransformation {
             var failureEffect = createRef(reactor, null, FAILURE);
             reaction.getEffects().add(failureEffect);
 
+            for (VarRef varref : task.getTaskSources()) {
+                var ref = createRef(reactor, null, varref.getVariable().getName());
+                reaction.getSources().add(ref);
+            }
+            
             reactor.getReactions().add(reaction);
         }
 
@@ -398,6 +446,15 @@ public class BehaviorTreeTransformation {
         param.setValue(value);
         reactor.getAttributes().add(attr);
     }
+    
+//    private boolean inputExistent(Reactor r, String portName) {
+//        for (Input input : r.getInputs()) {
+//            if(input.getName().equals(portName)) {
+//                return true;
+//            }
+//        }
+//        return false;
+//    }
 
     private VarRef createRef(Reactor r, Instantiation i, String portName) {
         var ref = LFF.createVarRef();

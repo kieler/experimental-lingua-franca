@@ -45,11 +45,13 @@ import org.lflang.lf.Connection;
 import org.lflang.lf.Deadline;
 import org.lflang.lf.Import;
 import org.lflang.lf.ImportedReactor;
+import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.Model;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.ReactorDecl;
+import org.lflang.lf.Task;
 import org.lflang.lf.VarRef;
 import org.lflang.lf.LfPackage;
 import org.lflang.lf.Mode;
@@ -103,7 +105,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             return getScopeForReactorDecl(context, reference);
         } else if (context instanceof ImportedReactor) {
             return getScopeForImportedReactor((ImportedReactor) context, reference);
-        } else if (context instanceof BehaviorTree) {
+        } else if (context instanceof BehaviorTree) { 
             return getScopeForReactorDecl(context, reference);
         }
         return super.getScope(context, reference);
@@ -179,15 +181,20 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
 
     protected IScope getScopeForVarRef(VarRef variable, EReference reference) {
         if (reference == LfPackage.Literals.VAR_REF__VARIABLE) {
-            // Resolve hierarchical reference
-            Reactor reactor;
+            // Resolve hierarchical reference Problem: container bei TaskImpl leer
+            Reactor reactor = null;
             Mode mode = null;
+            BehaviorTree behtree = null;
             if (variable.eContainer().eContainer() instanceof Reactor) {
                 reactor = (Reactor) variable.eContainer().eContainer();
             } else if (variable.eContainer().eContainer() instanceof Mode) {
                 mode = (Mode) variable.eContainer().eContainer();
                 reactor = (Reactor) variable.eContainer().eContainer().eContainer();
-            } else {
+            } else if (variable.eContainer().eContainer() instanceof BehaviorTree) {
+                behtree = (BehaviorTree) variable.eContainer().eContainer();
+                
+            }
+            else {
                 return Scopes.scopeFor(emptyList());
             }
 
@@ -208,10 +215,13 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                             BehaviorTreeTransformation.addImplictInterface(bt);
                             switch (type) {
                                 case TRIGGER:
+//                                    TODO
                                 case SOURCE:
+//                                    TODO return Scopes.scopeFor(bt.getInputs();
                                 case CLEFT:
                                     return Scopes.scopeFor(bt.getOutputs());
                                 case EFFECT:
+                                    return Scopes.scopeFor(bt.getInputs());
                                 case DEADLINE:
                                 case CRIGHT:
                                     return Scopes.scopeFor(bt.getInputs());
@@ -234,7 +244,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                     }
                 }
                 return Scopes.scopeFor(emptyList());
-            } else {
+            } else if (reactor != null){
                 // Resolve local reference
                 switch (type) {
                 case TRIGGER: {
@@ -248,8 +258,19 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                     candidates.addAll(allTimers(reactor));
                     return Scopes.scopeFor(candidates);
                 }
-                case SOURCE:
-                    return super.getScope(variable, reference);
+                case SOURCE: {//TODO
+//                    return super.getScope(variable, reference);
+//                    return Scopes.scopeFor(allInputs(reactor));
+                    var candidates = new ArrayList<EObject>();
+                    if (mode != null) {
+                        candidates.addAll(mode.getActions());
+                        candidates.addAll(mode.getTimers());
+                    }
+                    candidates.addAll(allInputs(reactor));
+                    candidates.addAll(allActions(reactor));
+                    candidates.addAll(allTimers(reactor));
+                    return Scopes.scopeFor(candidates);
+                }    
                 case EFFECT: {
                     var candidates = new ArrayList<EObject>();
                     if (mode != null) {
@@ -268,6 +289,29 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                 default:
                     return Scopes.scopeFor(emptyList());
                 }
+            } else if (behtree !=null) {
+                switch (type) {
+                    case SOURCE: {//TODO
+//                        return super.getScope(variable, reference);
+//                        return Scopes.scopeFor(allInputs(reactor));
+                        var candidates = new ArrayList<EObject>();
+                        
+                        candidates.addAll(behtree.getInputs());
+//                        candidates.addAll(allActions(reactor));
+//                        candidates.addAll(allTimers(reactor));
+                        return Scopes.scopeFor(candidates);
+                    }    
+                    case EFFECT: {
+//                        var candidates = new ArrayList<EObject>();
+//                        candidates.addAll(allOutputs(reactor));
+//                        candidates.addAll(allActions(reactor));
+//                        return Scopes.scopeFor(candidates);
+                    }
+                    default:
+                        return Scopes.scopeFor(emptyList());
+                    }
+            } else {
+                return Scopes.scopeFor(emptyList());
             }
         } else { // Resolve instance
             return super.getScope(variable, reference);
@@ -293,6 +337,14 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             } else if (conn.getRightPorts().contains(variable)) {
                 return RefType.CRIGHT;
             }
+        } else if (variable.eContainer() instanceof Task) {
+            var task = (Task) variable.eContainer();
+            if (task.getTaskSources().contains(variable)) {
+                return RefType.SOURCE;
+            } 
+//            else if (task.getEffects().contains(variable)) {
+//                return RefType.EFFECT;
+//            }
         }
         return RefType.NULL;
     }
