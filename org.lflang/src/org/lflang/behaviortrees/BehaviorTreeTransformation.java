@@ -69,6 +69,8 @@ public class BehaviorTreeTransformation {
     public static String START = "start";
     public static String SUCCESS = "success";
     public static String FAILURE = "failure";
+    
+//    public static Reactor rootReactor = null;
 
     public static void transform(Model lfModel) {
         new BehaviorTreeTransformation().transformAll(lfModel);
@@ -118,6 +120,7 @@ public class BehaviorTreeTransformation {
         var transformed = new HashMap<BehaviorTree, Reactor>();
         // Transform
         for (var bt : lfModel.getBtrees()) {
+//            rootReactor = null;
             transformed.put(bt, transformBTree(bt, newReactors));
         }
         // Fix references
@@ -148,50 +151,76 @@ public class BehaviorTreeTransformation {
     }
     
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
-        var fwdInputs = new HashMap<Reactor, ArrayList<String>>();
 
         var reactor = LFF.createReactor();
+//        rootBTReactor.add(reactor);
         newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
 //        setBTInterface(reactor);
-//        var inputsBT = new ArrayList<Input>();
-        
+        // Init set all inputs and outputs from bt LF structur
         for(Input input : bt.getInputs()) {
             var copyInput = EcoreUtil.copy(input);
             reactor.getInputs().add(copyInput);
-//            inputsBT.add(input);
         }
         for (Output output : bt.getOutputs()) {
             var copyOutput = EcoreUtil.copy(output);
             reactor.getOutputs().add(copyOutput);
         }
-
+        
         // Transform BT root
         var nodeReactor = transformNode(bt.getRootNode(), newReactors, reactor);
         var instance = LFF.createInstantiation();
-        instance.setReactorClass(nodeReactor);
+        instance.setReactorClass(nodeReactor); // WICHTIG? wofür?
         instance.setName("root");
         reactor.getInstantiations().add(instance);
 
         // forward in and outputs of mock reactor to BT root node
-        var connStart = createConn(reactor, null, START, nodeReactor, instance,
-                START);
+        connectInOutputs(reactor, nodeReactor, instance);
+
+        var connStart = createConn(reactor, null, START, nodeReactor, instance, START);
         reactor.getConnections().add(connStart);
-
-        var connSuccess = createConn(nodeReactor, instance, SUCCESS, reactor,
-                null, SUCCESS);
+        var connSuccess = createConn(nodeReactor, instance, SUCCESS, reactor, null, SUCCESS);
         reactor.getConnections().add(connSuccess);
-
-        var connFailure = createConn(nodeReactor, instance, FAILURE, reactor,
-                null, FAILURE);
+        var connFailure = createConn(nodeReactor, instance, FAILURE, reactor, null, FAILURE);
         reactor.getConnections().add(connFailure);
-        
 //        addBTInputConnections(reactor, newReactors);
         
         return reactor;
     }
+
+    private void addBTInOutputs(Reactor rootReactor, Reactor reactor) {
+        for(Input input : rootReactor.getInputs()) {
+            var copyInput = EcoreUtil.copy(input);
+            reactor.getInputs().add(copyInput);
+//            inputsBT.add(input);
+        }
+        for (Output output : rootReactor.getOutputs()) {
+            var copyOutput = EcoreUtil.copy(output);
+            reactor.getOutputs().add(copyOutput);
+        }
+    }
+    
+    private void connectInOutputs(Reactor reactor, Reactor childReactor,
+            Instantiation instance) {
+        
+        for (Input in : reactor.getInputs()) {
+            if (!in.getName().equals(START)) {
+                var conn = createConn(reactor, null, in.getName(), childReactor, instance, in.getName());
+                reactor.getConnections().add(conn);                
+            }
+        }
+
+//        for (Output out : rootReactor.getOutputs()) {
+//            var conn = createConn(nodeReactor, instance, out.getName(), rootReactor, null, out.getName());
+//            rootReactor.getConnections().add(conn);
+//        }
+
+    }
+    
+    
+
     // 1. Möglichkeit: Liste von Instantierungen weitergeben (oder als field)
     //     -> Problem, was wenn mehrere Reaktoren einen anderen instantiieren
     // 2. Möglichkeit: methode, die BT durchgeht und alle nodes abcheckt, ob die input haben wollen
@@ -200,15 +229,21 @@ public class BehaviorTreeTransformation {
     //         -> wie dann an BTroot methode die initierungen geben
     // 4. Möglichkeit: Liste von Connections
     //          -> gib root Reactor weiter, dann braucht man auch keinen extra parameter (aber keine instantierungen)
-    // TODO: var fwdInputs = new HashMap<Reactor, ArrayList<String>>();
+    // 5. Möglichkeit: FIELDS: 
+    //                      Es lohnt sich nicht, nur den Tasks Input zu geben, die danach fragen,
+    //                      weil man müsste die Sequence ganz durchgehen und gegebenfalls
+    //                      noch weiter tief gehen um zu wissen ob jetzige Sequence/Fallback
+    //                      auch den Input braucht (ineffizient)
+    //                      Man könnte sonst allen SeqFb den Input geben und dann prüfen ob ein child den
+    //                      Input braucht und wenn net dann den Input entfernen
+    //      var fwdInputs = new HashMap<Reactor, ArrayList<String>>();
     //      und in schon geschriebenen Code hier die Instantierungen durch root durchgehen machen
     //       ODER fwdInputs = new HashMap<HashMap<Reactor, Instant>, ArrayList<String>>();
 //    private void addBTInputConnections(Reactor rootNode, List<Reactor> newReactors) {
 //        for (Input input : rootNode.getInputs()) {
 //            for (Reactor r : newReactors) {
-//                if (!r.equals(rootNode) && inputExistent(r, input.getName())) {
-//                    var fwdInput = createConn(rootNode, null, START, r, null, FAILURE)
-//              PROBLEM: keine Instantierungen mehr vorhanden
+//                if (!r.equals(rootNode)) {
+////              PROBLEM: keine Instantierungen mehr vorhanden
 //                }
 //            }       
 //        }
@@ -219,7 +254,7 @@ public class BehaviorTreeTransformation {
         if (node instanceof Sequence) {
             return transformSequence((Sequence) node, newReactors, rootReactor);
         } else if (node instanceof Task) {
-            return transformTask((Task) node, newReactors);
+            return transformTask((Task) node, newReactors, rootReactor);
         } else if (node instanceof Fallback) {
             return transformFallback((Fallback) node, newReactors, rootReactor);
         }
@@ -232,8 +267,10 @@ public class BehaviorTreeTransformation {
         reactor.setName("Node" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
 
-        setBTInterface(reactor);
+//        setBTInterface(reactor);
 
+        addBTInOutputs(rootReactor, reactor);
+        
         // reaction will output failure, if any child produces failure
         Reaction reactionFailure = LFF.createReaction();
         Code failureCode = LFF.createCode();
@@ -292,7 +329,8 @@ public class BehaviorTreeTransformation {
         reactor.setName("Node" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.FALLBACK.toString());
 
-        setBTInterface(reactor);
+//        setBTInterface(reactor);
+        addBTInOutputs(rootReactor, reactor);
 
         // reaction will output failure, if any child produces failure
         Reaction reactionSuccess = LFF.createReaction();
@@ -346,7 +384,7 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
 
-    private Reactor transformTask(Task task, List<Reactor> newReactors) {
+    private Reactor transformTask(Task task, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         
@@ -360,13 +398,18 @@ public class BehaviorTreeTransformation {
                                NodeType.ACTION.toString();
         addBTNodeAnnotation(reactor, btNodeAnnot);
         
-        setBTInterface(reactor);
+//        setBTInterface(reactor);
+        addBTInOutputs(rootReactor, reactor);
         
-        for (VarRef varref : task.getTaskSources()) {
-            // put it into input
-            Variable variable = EcoreUtil.copy(varref.getVariable());
-            reactor.getInputs().add((Input) variable);
-        }
+        
+        // WIRD NUR SCHWER SO GEHEN, WEIL AUF DIE WEISE NICHT SICHERGESTELLT WIRD,
+        // DASS DER SEQ/FB VORHER AUCH DIE INPUTS BEKOMMT ODER NICHT! TODO verify
+//        for (VarRef varref : task.getTaskSources()) {
+//            // put it into input
+//            Variable variable = EcoreUtil.copy(varref.getVariable());
+//            reactor.getInputs().add((Input) variable);
+//            
+//        }
         
         var reaction = LFF.createReaction();
         if (task.getCode() != null) {
