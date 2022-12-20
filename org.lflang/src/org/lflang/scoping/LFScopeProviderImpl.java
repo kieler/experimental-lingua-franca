@@ -51,6 +51,7 @@ import org.lflang.lf.Model;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.ReactorDecl;
+import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
 import org.lflang.lf.VarRef;
 import org.lflang.lf.LfPackage;
@@ -190,8 +191,15 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             } else if (variable.eContainer().eContainer() instanceof Mode) {
                 mode = (Mode) variable.eContainer().eContainer();
                 reactor = (Reactor) variable.eContainer().eContainer().eContainer();
-            } else if (variable.eContainer().eContainer() instanceof BehaviorTree) {
-                behtree = (BehaviorTree) variable.eContainer().eContainer();
+            } else if (variable.eContainer() instanceof Task || variable.eContainer() instanceof Sequence) {
+                var parent = variable.eContainer();
+                while (behtree == null) {
+                    if (parent.eContainer() instanceof BehaviorTree) {
+                        behtree = (BehaviorTree) parent.eContainer();
+                    } else {
+                        parent = parent.eContainer();
+                    }
+                }
                 
             }
             else {
@@ -200,7 +208,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
 
             RefType type = getRefType(variable);
 
-            if (variable.getContainer() != null) { // Resolve hierarchical port reference
+            if (variable.getContainer() != null) { // Resolve hierarchical port reference hier nur für varref aus instantiations!
                 var instanceName = nameProvider.getFullyQualifiedName(variable.getContainer());
                 var instances = new ArrayList<Instantiation>(reactor.getInstantiations());
                 if (mode != null) {

@@ -190,6 +190,7 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
 
+    // TODO delete this
     private void addBTInOutputs(Reactor rootReactor, Reactor reactor) {
         for(Input input : rootReactor.getInputs()) {
             var copyInput = EcoreUtil.copy(input);
@@ -205,8 +206,13 @@ public class BehaviorTreeTransformation {
     private void connectInOutputs(Reactor reactor, Reactor childReactor,
             Instantiation instance) {
         
+        var childInputNames = new ArrayList<String>();
+        for (Input inputChild : childReactor.getInputs()) {
+            childInputNames.add(inputChild.getName());
+        }
+        
         for (Input in : reactor.getInputs()) {
-            if (!in.getName().equals(START)) {
+            if (!in.getName().equals(START) && childInputNames.contains(in.getName())) {  //TODO !mb start signal aus transformBTree rausnehmen und hier rein
                 var conn = createConn(reactor, null, in.getName(), childReactor, instance, in.getName());
                 reactor.getConnections().add(conn);                
             }
@@ -267,9 +273,9 @@ public class BehaviorTreeTransformation {
         reactor.setName("Node" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
 
-//        setBTInterface(reactor);
+        setBTInterface(reactor);
 
-        addBTInOutputs(rootReactor, reactor);
+//        addBTInOutputs(rootReactor, reactor);
         
         // reaction will output failure, if any child produces failure
         Reaction reactionFailure = LFF.createReaction();
@@ -285,11 +291,29 @@ public class BehaviorTreeTransformation {
         Instantiation lastInstantiation = null;
         for (var node : seq.getNodes()) {
             var nodeReactor = transformNode(node, newReactors, rootReactor);
+            
+            
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
             instance.setName("node" + seq.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
+            
+            // add all inputs of childs to own inputs
+            for (Input rootInput : nodeReactor.getInputs()) {
+                var reactorInputNames = new ArrayList<String>();
+                for (Input reactorInput : reactor.getInputs()) {
+                    reactorInputNames.add(reactorInput.getName());
+                }
+                if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                    var copyInput = EcoreUtil.copy(rootInput);
+                    reactor.getInputs().add(copyInput);
+                    // Connect Inputs
+                    var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
+                    reactor.getConnections().add(inputConn);
+                }
+                
+            }
             // add current childs failure output as failure output of
             // sequence reactor
             var failureTrigger = createRef(nodeReactor, instance, FAILURE);
@@ -398,12 +422,24 @@ public class BehaviorTreeTransformation {
                                NodeType.ACTION.toString();
         addBTNodeAnnotation(reactor, btNodeAnnot);
         
-//        setBTInterface(reactor);
-        addBTInOutputs(rootReactor, reactor);
+        setBTInterface(reactor);
+//        addBTInOutputs(rootReactor, reactor);
+        
+        // set Inputs
+        for (VarRef varref : task.getTaskSources()) {
+            for (Input rootInput : rootReactor.getInputs()) {
+                if (varref.getVariable().getName().equals(rootInput.getName())) {   //TODO ineffizient
+                    // copy the input (wenn cpy net geht mach wie bei setBTInterface)
+                    var copyInput = EcoreUtil.copy(rootInput);
+                    reactor.getInputs().add(copyInput);
+                }
+            }
+        }
         
         
         // WIRD NUR SCHWER SO GEHEN, WEIL AUF DIE WEISE NICHT SICHERGESTELLT WIRD,
-        // DASS DER SEQ/FB VORHER AUCH DIE INPUTS BEKOMMT ODER NICHT! TODO verify
+        // DASS DER SEQ/FB VORHER AUCH DIE INPUTS BEKOMMT ODER NICHT! 
+        //    -> STIMMT, deshalb neue vorangehensweise
 //        for (VarRef varref : task.getTaskSources()) {
 //            // put it into input
 //            Variable variable = EcoreUtil.copy(varref.getVariable());
