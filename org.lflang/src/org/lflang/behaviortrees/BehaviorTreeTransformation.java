@@ -300,15 +300,18 @@ public class BehaviorTreeTransformation {
             reactor.getInstantiations().add(instance);
             
             // add all inputs of childs to own inputs
+            var reactorInputNames = new ArrayList<String>();
+            for (Input reactorInput : reactor.getInputs()) {
+                reactorInputNames.add(reactorInput.getName());
+            }
             for (Input rootInput : nodeReactor.getInputs()) {
-                var reactorInputNames = new ArrayList<String>();
-                for (Input reactorInput : reactor.getInputs()) {
-                    reactorInputNames.add(reactorInput.getName());
-                }
                 if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
                     // Connect Inputs
+                }
+                // Connect the inputs
+                if (!rootInput.getName().equals(START)) {
                     var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
                     reactor.getConnections().add(inputConn);
                 }
@@ -379,23 +382,24 @@ public class BehaviorTreeTransformation {
             instance.setName("node" + fb.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
             
-            // add all inputs of childs to own inputs
+         // add all inputs of childs to own inputs
+            var reactorInputNames = new ArrayList<String>();
+            for (Input reactorInput : reactor.getInputs()) {
+                reactorInputNames.add(reactorInput.getName());
+            }
             for (Input rootInput : nodeReactor.getInputs()) {
-                var reactorInputNames = new ArrayList<String>();
-                for (Input reactorInput : reactor.getInputs()) {
-                    reactorInputNames.add(reactorInput.getName());
-                }
                 if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
                     // Connect Inputs
+                }
+                // Connect the inputs
+                if (!rootInput.getName().equals(START)) {
                     var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
                     reactor.getConnections().add(inputConn);
                 }
                 
             }
-            
-            
             // add current child success output as success output of
             // sequence reactor
             var successTrigger = createRef(nodeReactor, instance, SUCCESS);
