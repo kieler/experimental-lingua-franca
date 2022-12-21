@@ -191,17 +191,17 @@ public class BehaviorTreeTransformation {
     }
 
     // TODO delete this
-    private void addBTInOutputs(Reactor rootReactor, Reactor reactor) {
-        for(Input input : rootReactor.getInputs()) {
-            var copyInput = EcoreUtil.copy(input);
-            reactor.getInputs().add(copyInput);
-//            inputsBT.add(input);
-        }
-        for (Output output : rootReactor.getOutputs()) {
-            var copyOutput = EcoreUtil.copy(output);
-            reactor.getOutputs().add(copyOutput);
-        }
-    }
+//    private void addBTInOutputs(Reactor rootReactor, Reactor reactor) {
+//        for(Input input : rootReactor.getInputs()) {
+//            var copyInput = EcoreUtil.copy(input);
+//            reactor.getInputs().add(copyInput);
+////            inputsBT.add(input);
+//        }
+//        for (Output output : rootReactor.getOutputs()) {
+//            var copyOutput = EcoreUtil.copy(output);
+//            reactor.getOutputs().add(copyOutput);
+//        }
+//    }
     
     private void connectInOutputs(Reactor reactor, Reactor childReactor,
             Instantiation instance) {
@@ -353,8 +353,8 @@ public class BehaviorTreeTransformation {
         reactor.setName("Node" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.FALLBACK.toString());
 
-//        setBTInterface(reactor);
-        addBTInOutputs(rootReactor, reactor);
+        setBTInterface(reactor);
+//        addBTInOutputs(rootReactor, reactor);
 
         // reaction will output failure, if any child produces failure
         Reaction reactionSuccess = LFF.createReaction();
@@ -370,11 +370,32 @@ public class BehaviorTreeTransformation {
         Instantiation lastInstantiation = null;
         for (var node : fb.getNodes()) {
             var nodeReactor = transformNode(node, newReactors, rootReactor);
+            
+            
+            
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
             instance.setName("node" + fb.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
+            
+            // add all inputs of childs to own inputs
+            for (Input rootInput : nodeReactor.getInputs()) {
+                var reactorInputNames = new ArrayList<String>();
+                for (Input reactorInput : reactor.getInputs()) {
+                    reactorInputNames.add(reactorInput.getName());
+                }
+                if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                    var copyInput = EcoreUtil.copy(rootInput);
+                    reactor.getInputs().add(copyInput);
+                    // Connect Inputs
+                    var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
+                    reactor.getConnections().add(inputConn);
+                }
+                
+            }
+            
+            
             // add current child success output as success output of
             // sequence reactor
             var successTrigger = createRef(nodeReactor, instance, SUCCESS);
