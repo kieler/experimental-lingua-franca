@@ -217,11 +217,19 @@ public class BehaviorTreeTransformation {
                 reactor.getConnections().add(conn);                
             }
         }
+        
+        var childOutputNames = new ArrayList<String>();
+        for (Output outputChild : childReactor.getOutputs()) {
+            childOutputNames.add(outputChild.getName());
+        }
 
-//        for (Output out : rootReactor.getOutputs()) {
-//            var conn = createConn(nodeReactor, instance, out.getName(), rootReactor, null, out.getName());
-//            rootReactor.getConnections().add(conn);
-//        }
+        for (Output out : reactor.getOutputs()) {
+            if (!out.getName().equals(SUCCESS) && !out.getName().equals(FAILURE) && childOutputNames.contains(out.getName())) {
+                var conn = createConn(childReactor, instance, out.getName(), reactor, null, out.getName());
+                reactor.getConnections().add(conn);
+                
+            }
+        }
 
     }
     
@@ -308,7 +316,6 @@ public class BehaviorTreeTransformation {
                 if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
-                    // Connect Inputs
                 }
                 // Connect the inputs
                 if (!rootInput.getName().equals(START)) {
@@ -317,6 +324,25 @@ public class BehaviorTreeTransformation {
                 }
                 
             }
+            
+            // add all inputs of childs to own inputs // make this a method (mit option zwischen input output) TODO
+            var reactorOutputNames = new ArrayList<String>();
+            for (Output reactorOutput : reactor.getOutputs()) {
+                reactorOutputNames.add(reactorOutput.getName());
+            }
+            for (Output rootOutput : nodeReactor.getOutputs()) {
+                if (!reactorOutputNames.contains(rootOutput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                    var copyOutput = EcoreUtil.copy(rootOutput);
+                    reactor.getOutputs().add(copyOutput);
+                }
+                // Connect the Output
+                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE)) {
+                    var outputConn = createConn(nodeReactor, instance, rootOutput.getName(), reactor, null, rootOutput.getName());
+                    reactor.getConnections().add(outputConn);
+                }
+                
+            }
+            
             // add current childs failure output as failure output of
             // sequence reactor
             var failureTrigger = createRef(nodeReactor, instance, FAILURE);
@@ -391,7 +417,6 @@ public class BehaviorTreeTransformation {
                 if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
-                    // Connect Inputs
                 }
                 // Connect the inputs
                 if (!rootInput.getName().equals(START)) {
@@ -400,6 +425,25 @@ public class BehaviorTreeTransformation {
                 }
                 
             }
+            
+            // add all inputs of childs to own inputs // make this a method (mit option zwischen input output) TODO
+            var reactorOutputNames = new ArrayList<String>();
+            for (Output reactorOutput : reactor.getOutputs()) {
+                reactorOutputNames.add(reactorOutput.getName());
+            }
+            for (Output rootOutput : nodeReactor.getOutputs()) {
+                if (!reactorOutputNames.contains(rootOutput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                    var copyOutput = EcoreUtil.copy(rootOutput);
+                    reactor.getOutputs().add(copyOutput);
+                }
+                // Connect the Output
+                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE)) {
+                    var outputConn = createConn(nodeReactor, instance, rootOutput.getName(), reactor, null, rootOutput.getName());
+                    reactor.getConnections().add(outputConn);
+                }
+                
+            }
+            
             // add current child success output as success output of
             // sequence reactor
             var successTrigger = createRef(nodeReactor, instance, SUCCESS);
@@ -460,7 +504,16 @@ public class BehaviorTreeTransformation {
                 }
             }
         }
-        
+        // set outputs
+        for (VarRef varref : task.getTaskEffects()) {
+            for (Output rootOutput : rootReactor.getOutputs()) {
+                if (varref.getVariable().getName().equals(rootOutput.getName())) {   //TODO ineffizient
+                    // copy the input (wenn cpy net geht mach wie bei setBTInterface)
+                    var copyOutput = EcoreUtil.copy(rootOutput);
+                    reactor.getOutputs().add(copyOutput);
+                }
+            }
+        }
         
         // WIRD NUR SCHWER SO GEHEN, WEIL AUF DIE WEISE NICHT SICHERGESTELLT WIRD,
         // DASS DER SEQ/FB VORHER AUCH DIE INPUTS BEKOMMT ODER NICHT! 
@@ -490,6 +543,11 @@ public class BehaviorTreeTransformation {
             for (VarRef varref : task.getTaskSources()) {
                 var ref = createRef(reactor, null, varref.getVariable().getName());
                 reaction.getSources().add(ref);
+            }
+            
+            for (VarRef varref : task.getTaskEffects()) {
+                var ref = createRef(reactor, null, varref.getVariable().getName());
+                reaction.getEffects().add(ref);
             }
             
             reactor.getReactions().add(reaction);

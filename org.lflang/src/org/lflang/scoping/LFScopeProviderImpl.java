@@ -310,10 +310,10 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                         return Scopes.scopeFor(candidates);
                     }    
                     case EFFECT: {
-//                        var candidates = new ArrayList<EObject>();
-//                        candidates.addAll(allOutputs(reactor));
+                        var candidates = new ArrayList<EObject>();
+                        candidates.addAll(behtree.getOutputs());
 //                        candidates.addAll(allActions(reactor));
-//                        return Scopes.scopeFor(candidates);
+                        return Scopes.scopeFor(candidates);
                     }
                     default:
                         return Scopes.scopeFor(emptyList());
@@ -349,10 +349,9 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             var task = (Task) variable.eContainer();
             if (task.getTaskSources().contains(variable)) {
                 return RefType.SOURCE;
-            } 
-//            else if (task.getEffects().contains(variable)) {
-//                return RefType.EFFECT;
-//            }
+            } else if (task.getTaskEffects().contains(variable)) {
+                return RefType.EFFECT;
+            }
         }
         return RefType.NULL;
     }

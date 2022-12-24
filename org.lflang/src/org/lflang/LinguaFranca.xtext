@@ -138,8 +138,33 @@ Task:
     ('task'|'action'|condition?='condition')
         (taskName=STRING)?
         (taskSources+=VarRef (',' taskSources+=VarRef)*)?
+        ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
     code=Code
 ;
+
+//    (attributes+=Attribute)* mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
+
+Local:
+    {Local}
+    'local' name=ID (':' type=Type)? ';'?
+;
+
+Sequence:
+    {Sequence}
+    'sequence' '{'
+        locals+=Local*
+        nodes+=BehaviorTreeNode*
+    '}'
+;
+
+Fallback:
+    {Fallback}
+    'fallback' '{'
+        locals+=Local*
+        nodes+=BehaviorTreeNode*
+    '}'    
+;
+
 //Task:
 //    {Task}
 ////    (attributes+=Attribute)*
@@ -164,24 +189,6 @@ Task:
 //    code=Code
 //    (stp=STP)?
 //    (deadline=Deadline)?;
-
-Sequence:
-    {Sequence}
-    'sequence' '{'
-        nodes+=BehaviorTreeNode*
-    '}'
-;
-    
-
-Fallback:
-    {Fallback}
-    'fallback' '{'
-        nodes+=BehaviorTreeNode*
-    '}'    
-;
-
-
-
 
 /////////// Statements
 
