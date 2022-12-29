@@ -30,7 +30,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.eclipse.emf.common.util.ECollections;
 import org.eclipse.emf.ecore.util.EcoreUtil;
+import org.lflang.lf.AttrParm;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
 import org.lflang.lf.Code;
@@ -39,6 +41,7 @@ import org.lflang.lf.Fallback;
 import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
+import org.lflang.lf.Local;
 import org.lflang.lf.Model;
 import org.lflang.lf.Output;
 import org.lflang.lf.Port;
@@ -121,7 +124,10 @@ public class BehaviorTreeTransformation {
         // Transform
         for (var bt : lfModel.getBtrees()) {
 //            rootReactor = null;
-            transformed.put(bt, transformBTree(bt, newReactors));
+            // btree mit nur inputs wird fehler auswerfen: Das ist nicht der Fix TODO
+            if (bt.getRootNode() != null) {
+                transformed.put(bt, transformBTree(bt, newReactors));                
+            }
         }
         // Fix references
         var instantiations = Lists.newArrayList(
@@ -278,7 +284,7 @@ public class BehaviorTreeTransformation {
     private Reactor transformSequence(Sequence seq, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Node" + nodeNameCounter++);
+        reactor.setName("NodeSequence" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
 
         setBTInterface(reactor);
@@ -304,16 +310,20 @@ public class BehaviorTreeTransformation {
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
-            instance.setName("node" + seq.getNodes().indexOf(node));
+            instance.setName("nodeSequenceInst" + seq.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
             
-            // add all inputs of childs to own inputs
+            // TODO connect locals
+            // add all inputs of childs to own inputs TODO if they are not locals
+            // man muss noch zwischen Effect und Source unterscheiden
             var reactorInputNames = new ArrayList<String>();
             for (Input reactorInput : reactor.getInputs()) {
                 reactorInputNames.add(reactorInput.getName());
             }
             for (Input rootInput : nodeReactor.getInputs()) {
-                if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                boolean isLocal = rootInput.getAttributes().contains("isLocal");
+                if (!reactorInputNames.contains(rootInput.getName()) 
+                        && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
                 }
@@ -331,12 +341,25 @@ public class BehaviorTreeTransformation {
                 reactorOutputNames.add(reactorOutput.getName());
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
-                if (!reactorOutputNames.contains(rootOutput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                
+                boolean isLocal = false;
+                for (var attr : rootOutput.getAttributes()) {
+                    if (attr.getAttrName().equals("isLocal")) {
+                        for (var attrparms : attr.getAttrParms()) {
+                            if (attrparms.getName().equals("local")) {
+                                isLocal = attrparms.getValue().getBool().equals("true");
+                                
+                            }
+                        }
+                    }
+                }
+                if (!reactorOutputNames.contains(rootOutput.getName())
+                        && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyOutput = EcoreUtil.copy(rootOutput);
                     reactor.getOutputs().add(copyOutput);
                 }
                 // Connect the Output
-                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE)) {
+                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE) && !isLocal) {
                     var outputConn = createConn(nodeReactor, instance, rootOutput.getName(), reactor, null, rootOutput.getName());
                     reactor.getConnections().add(outputConn);
                 }
@@ -480,9 +503,9 @@ public class BehaviorTreeTransformation {
     private Reactor transformTask(Task task, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        
+        // TODO richtige benennung von allen task, seq, fb
         String nameOfTask = task.getTaskName() == null ? 
-                                "Node" + (nodeNameCounter++) :
+                                "NodeTask" + (nodeNameCounter++) :
                                  task.getTaskName();
         reactor.setName(nameOfTask);
         
@@ -511,6 +534,79 @@ public class BehaviorTreeTransformation {
                     // copy the input (wenn cpy net geht mach wie bei setBTInterface)
                     var copyOutput = EcoreUtil.copy(rootOutput);
                     reactor.getOutputs().add(copyOutput);
+                }
+            }
+        }
+        
+        // set local outputs
+        if (!(task.eContainer() instanceof BehaviorTree)) { // nötig weil nur dann gehen wir hier durch
+            var allLocals = new ArrayList<Local>();
+            if (task.eContainer() instanceof Sequence) {
+                allLocals.addAll(((Sequence) task.eContainer()).getLocals());
+            } else {
+                allLocals.addAll(((Fallback) task.eContainer()).getLocals());
+            }
+            
+            for (VarRef varref : task.getTaskEffects()) {
+                if (varref.getVariable() instanceof Local) {
+                    for (Local taskLocal : allLocals) {
+                        if (varref.getVariable().getName().equals(taskLocal.getName())) {
+                            Output localOutput = LFF.createOutput();
+                            localOutput.setName(varref.getVariable().getName());
+                            var copyType = EcoreUtil.copy(taskLocal.getType());
+                            localOutput.setType(copyType);
+                            
+                            // make this a method
+                            var localAttr = LFF.createAttribute();
+                            localAttr.setAttrName("isLocal");
+                            var localAttrParam = LFF.createAttrParm();
+                            localAttrParam.setName("local");
+                            var localAttrParamVal = LFF.createAttrParmValue();
+                            localAttrParamVal.setBool("true");
+                            localAttrParam.setValue(localAttrParamVal);
+                            localAttr.getAttrParms().add(localAttrParam);
+                            localOutput.getAttributes().add(localAttr);
+                            
+                            reactor.getOutputs().add(localOutput);
+                            
+                        }
+                    }
+                    
+                }
+            }
+        }
+        
+        // set local inputs
+        if (!(task.eContainer() instanceof BehaviorTree)) {
+            var allLocals = new ArrayList<Local>();
+            if (task.eContainer() instanceof Sequence) {
+                allLocals.addAll(((Sequence) task.eContainer()).getLocals());
+            } else {
+                allLocals.addAll(((Fallback) task.eContainer()).getLocals());
+            }
+            
+            for (VarRef varref : task.getTaskSources()) {
+                if (varref.getVariable() instanceof Local) {
+                    for (Local taskLocal : allLocals) {
+                        if (varref.getVariable().getName().equals(taskLocal.getName())) {
+                            Input localInput = LFF.createInput();
+                            localInput.setName(varref.getVariable().getName());
+                            var copyType = EcoreUtil.copy(taskLocal.getType());
+                            localInput.setType(copyType);
+                            
+                            var localAttr = LFF.createAttribute();
+                            localAttr.setAttrName("isLocal");
+                            var localAttrParam = LFF.createAttrParm();
+                            localAttrParam.setName("local");
+                            var localAttrParamVal = LFF.createAttrParmValue();
+                            localAttrParamVal.setBool("true");
+                            localAttrParam.setValue(localAttrParamVal);
+                            localAttr.getAttrParms().add(localAttrParam);
+                            localInput.getAttributes().add(localAttr);
+                            
+                            reactor.getInputs().add(localInput);
+                        }
+                    }
                 }
             }
         }

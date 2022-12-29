@@ -146,7 +146,7 @@ Task:
 
 Local:
     {Local}
-    'local' name=ID (':' type=Type)? ';'?
+    (attributes+=Attribute)* mutable?='mutable'? 'local' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
 ;
 
 Sequence:
@@ -357,7 +357,7 @@ TypedVariable:
 ;
 
 Variable:
-    TypedVariable | Timer | Mode;
+    TypedVariable | Timer | Mode | Local; // added | Local
 
 VarRef:
     variable=[Variable] | container=[Instantiation] '.' variable=[Variable]

@@ -43,6 +43,7 @@ import org.lflang.lf.Assignment;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.Connection;
 import org.lflang.lf.Deadline;
+import org.lflang.lf.Fallback;
 import org.lflang.lf.Import;
 import org.lflang.lf.ImportedReactor;
 import org.lflang.lf.Input;
@@ -303,6 +304,16 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
 //                        return super.getScope(variable, reference);
 //                        return Scopes.scopeFor(allInputs(reactor));
                         var candidates = new ArrayList<EObject>();
+                        var seqOrFb = variable.eContainer().eContainer();
+                        while (!(seqOrFb instanceof BehaviorTree)) {
+                            if (seqOrFb instanceof Sequence) {
+                                candidates.addAll(((Sequence) seqOrFb).getLocals());
+                                seqOrFb = seqOrFb.eContainer();
+                            } else {
+                                candidates.addAll(((Fallback) seqOrFb).getLocals());
+                                seqOrFb = seqOrFb.eContainer();
+                            }
+                        }
                         
                         candidates.addAll(behtree.getInputs());
 //                        candidates.addAll(allActions(reactor));
@@ -311,6 +322,17 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                     }    
                     case EFFECT: {
                         var candidates = new ArrayList<EObject>();
+                        var seqOrFb = variable.eContainer().eContainer();
+                        while (!(seqOrFb instanceof BehaviorTree)) {
+                            if (seqOrFb instanceof Sequence) {
+                                candidates.addAll(((Sequence) seqOrFb).getLocals());
+                                seqOrFb = seqOrFb.eContainer();
+                            } else {
+                                candidates.addAll(((Fallback) seqOrFb).getLocals());
+                                seqOrFb = seqOrFb.eContainer();
+                            }
+                            
+                        }
                         candidates.addAll(behtree.getOutputs());
 //                        candidates.addAll(allActions(reactor));
                         return Scopes.scopeFor(candidates);
