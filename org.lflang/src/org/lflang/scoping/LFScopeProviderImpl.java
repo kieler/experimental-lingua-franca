@@ -300,7 +300,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                 }
             } else if (behtree !=null) {
                 switch (type) {
-                    case SOURCE: {//TODO
+                    case SOURCE: {//TODO mb ineffizient?
 //                        return super.getScope(variable, reference);
 //                        return Scopes.scopeFor(allInputs(reactor));
                         var candidates = new ArrayList<EObject>();

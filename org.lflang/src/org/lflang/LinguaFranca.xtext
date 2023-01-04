@@ -229,10 +229,11 @@ MethodArgument:
 ;
 
 Input:
-    (attributes+=Attribute)* mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
+    (attributes+=Attribute)* mutable?='mutable'? (local=Boolean)? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
+    ;
 
 Output:
-    (attributes+=Attribute)* 'output' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
+    (attributes+=Attribute)* (local=Boolean)? 'output' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
 
 // Timing specification for a timer: (offset, period)
 // Can be empty, which means (0,0) = (NOW, ONCE).

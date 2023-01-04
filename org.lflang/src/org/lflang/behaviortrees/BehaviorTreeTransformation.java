@@ -277,7 +277,7 @@ public class BehaviorTreeTransformation {
             return transformTask((Task) node, newReactors, rootReactor);
         } else if (node instanceof Fallback) {
             return transformFallback((Fallback) node, newReactors, rootReactor);
-        }
+        } // TODO parralell
         return null;
     }
 
@@ -301,8 +301,10 @@ public class BehaviorTreeTransformation {
         reactionFailure.getEffects().add(failureEffect);
 
         int i = 0;
-        Reactor lastReactor = reactor;
-        Instantiation lastInstantiation = null;
+//        Reactor lastReactor = reactor;
+//        Instantiation lastInstantiation = null;
+        var last = new ReactorAndInst(reactor, null);
+        var localSenders = new HashMap<String,ReactorAndInst>();
         for (var node : seq.getNodes()) {
             var nodeReactor = transformNode(node, newReactors, rootReactor);
             
@@ -321,14 +323,14 @@ public class BehaviorTreeTransformation {
                 reactorInputNames.add(reactorInput.getName());
             }
             for (Input rootInput : nodeReactor.getInputs()) {
-                boolean isLocal = rootInput.getAttributes().contains("isLocal");
+                boolean isLocal = rootInput.getLocal() != null;
                 if (!reactorInputNames.contains(rootInput.getName()) 
                         && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
                 }
                 // Connect the inputs
-                if (!rootInput.getName().equals(START)) {
+                if (!rootInput.getName().equals(START) && !isLocal) {
                     var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
                     reactor.getConnections().add(inputConn);
                 }
@@ -342,17 +344,18 @@ public class BehaviorTreeTransformation {
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
                 
-                boolean isLocal = false;
-                for (var attr : rootOutput.getAttributes()) {
-                    if (attr.getAttrName().equals("isLocal")) {
-                        for (var attrparms : attr.getAttrParms()) {
-                            if (attrparms.getName().equals("local")) {
-                                isLocal = attrparms.getValue().getBool().equals("true");
-                                
-                            }
-                        }
-                    }
-                }
+                boolean isLocal = rootOutput.getLocal() != null;
+                // Vorteil: man muss nicht mehr durch alle Attributes gehen.
+//                for (var attr : rootOutput.getAttributes()) {
+//                    if (attr.getAttrName().equals("isLocal")) {
+//                        for (var attrparms : attr.getAttrParms()) {
+//                            if (attrparms.getName().equals("local")) {
+//                                isLocal = attrparms.getValue().getBool().equals("true");
+//                                
+//                            }
+//                        }
+//                    }
+//                }
                 if (!reactorOutputNames.contains(rootOutput.getName())
                         && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyOutput = EcoreUtil.copy(rootOutput);
@@ -380,17 +383,34 @@ public class BehaviorTreeTransformation {
                 reactor.getConnections().add(connStart);
             } else if (i < seq.getNodes().size()) {
                 // if non-last task was successful start next task 
-                var connForward = createConn(lastReactor, lastInstantiation,
+                var connForward = createConn(last.reactor, last.inst,
                         SUCCESS, nodeReactor, instance, START);
                 reactor.getConnections().add(connForward);
             }
+            // HOW TO DO CONNECTIONS? TODO: was tun wenn mehrere gleichen local haben?
+            // TODO .getLocal() zu Bool machen.
+//             Map<Reactor, Instantiation> NEIN LIEBER ALS CLASS
+            // Map<localName, Reactor>
+            for (Output output : nodeReactor.getOutputs()) {
+                var localSender = new ReactorAndInst(nodeReactor, instance);
+                if (output.getLocal() != null && output.getLocal().equals("true")) {
+                    localSenders.put(output.getName(), localSender);
+                }
+            }
+            for (Input input : nodeReactor.getInputs()) {
+                if (input.getLocal() != null) {
+                    var localSender = localSenders.get(input.getName());
+                    var conn = createConn(localSender.reactor, localSender.inst, input.getName(), nodeReactor, instance, input.getName());
+                    reactor.getConnections().add(conn);
+                }
+            }
 
-            lastReactor = nodeReactor;
-            lastInstantiation = instance;
+            last.reactor = nodeReactor;
+            last.inst = instance;
             i++;
         }
         // if last tasks output success, then sequence will output success
-        var connSuccess = createConn(lastReactor, lastInstantiation, SUCCESS,
+        var connSuccess = createConn(last.reactor, last.inst, SUCCESS,
                 reactor, null, SUCCESS);
         reactor.getConnections().add(connSuccess);
 
@@ -557,15 +577,16 @@ public class BehaviorTreeTransformation {
                             localOutput.setType(copyType);
                             
                             // make this a method
-                            var localAttr = LFF.createAttribute();
-                            localAttr.setAttrName("isLocal");
-                            var localAttrParam = LFF.createAttrParm();
-                            localAttrParam.setName("local");
-                            var localAttrParamVal = LFF.createAttrParmValue();
-                            localAttrParamVal.setBool("true");
-                            localAttrParam.setValue(localAttrParamVal);
-                            localAttr.getAttrParms().add(localAttrParam);
-                            localOutput.getAttributes().add(localAttr);
+//                            var localAttr = LFF.createAttribute();
+//                            localAttr.setAttrName("isLocal");
+//                            var localAttrParam = LFF.createAttrParm();
+//                            localAttrParam.setName("local");
+//                            var localAttrParamVal = LFF.createAttrParmValue();
+//                            localAttrParamVal.setBool("true");
+//                            localAttrParam.setValue(localAttrParamVal);
+//                            localAttr.getAttrParms().add(localAttrParam);
+//                            localOutput.getAttributes().add(localAttr);
+                            localOutput.setLocal("true");
                             
                             reactor.getOutputs().add(localOutput);
                             
@@ -594,15 +615,16 @@ public class BehaviorTreeTransformation {
                             var copyType = EcoreUtil.copy(taskLocal.getType());
                             localInput.setType(copyType);
                             
-                            var localAttr = LFF.createAttribute();
-                            localAttr.setAttrName("isLocal");
-                            var localAttrParam = LFF.createAttrParm();
-                            localAttrParam.setName("local");
-                            var localAttrParamVal = LFF.createAttrParmValue();
-                            localAttrParamVal.setBool("true");
-                            localAttrParam.setValue(localAttrParamVal);
-                            localAttr.getAttrParms().add(localAttrParam);
-                            localInput.getAttributes().add(localAttr);
+//                            var localAttr = LFF.createAttribute();
+//                            localAttr.setAttrName("local");
+//                            var localAttrParam = LFF.createAttrParm();
+//                            localAttrParam.setName("local");
+//                            var localAttrParamVal = LFF.createAttrParmValue();
+//                            localAttrParamVal.setBool("true");
+//                            localAttrParam.setValue(localAttrParamVal);
+//                            localAttr.getAttrParms().add(localAttrParam);
+//                            localInput.getAttributes().add(localAttr);
+                            localInput.setLocal("true");
                             
                             reactor.getInputs().add(localInput);
                         }
@@ -736,6 +758,15 @@ public class BehaviorTreeTransformation {
             return opt.get();
         } else {
             return null;
+        }
+    }
+    class ReactorAndInst {
+        Reactor reactor = null;
+        Instantiation inst = null;
+        
+        private ReactorAndInst(Reactor reactor, Instantiation instantiation) {
+            this.reactor = reactor;
+            this.inst = instantiation;
         }
     }
 }
