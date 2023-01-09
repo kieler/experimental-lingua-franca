@@ -30,9 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Stream;
 
-import org.eclipse.emf.common.util.ECollections;
 import org.eclipse.emf.ecore.util.EcoreUtil;
-import org.lflang.lf.AttrParm;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeNode;
 import org.lflang.lf.Code;
@@ -51,7 +49,6 @@ import org.lflang.lf.Sequence;
 import org.lflang.lf.Task;
 import org.lflang.lf.Type;
 import org.lflang.lf.VarRef;
-import org.lflang.lf.Variable;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -159,12 +156,10 @@ public class BehaviorTreeTransformation {
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
 
         var reactor = LFF.createReactor();
-//        rootBTReactor.add(reactor);
         newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
-//        setBTInterface(reactor);
         // Init set all inputs and outputs from bt LF structur
         for(Input input : bt.getInputs()) {
             var copyInput = EcoreUtil.copy(input);
@@ -176,7 +171,8 @@ public class BehaviorTreeTransformation {
         }
         
         // Transform BT root
-        var nodeReactor = transformNode(bt.getRootNode(), newReactors, reactor);
+        var deleteThis = bt.getRootNode(); // makes debugging easier (temporary)
+        var nodeReactor = transformNode(deleteThis, newReactors, reactor);
         var instance = LFF.createInstantiation();
         instance.setReactorClass(nodeReactor); // WICHTIG? wofür?
         instance.setName("root");
@@ -191,23 +187,9 @@ public class BehaviorTreeTransformation {
         reactor.getConnections().add(connSuccess);
         var connFailure = createConn(nodeReactor, instance, FAILURE, reactor, null, FAILURE);
         reactor.getConnections().add(connFailure);
-//        addBTInputConnections(reactor, newReactors);
         
         return reactor;
     }
-
-    // TODO delete this
-//    private void addBTInOutputs(Reactor rootReactor, Reactor reactor) {
-//        for(Input input : rootReactor.getInputs()) {
-//            var copyInput = EcoreUtil.copy(input);
-//            reactor.getInputs().add(copyInput);
-////            inputsBT.add(input);
-//        }
-//        for (Output output : rootReactor.getOutputs()) {
-//            var copyOutput = EcoreUtil.copy(output);
-//            reactor.getOutputs().add(copyOutput);
-//        }
-//    }
     
     private void connectInOutputs(Reactor reactor, Reactor childReactor,
             Instantiation instance) {
@@ -238,37 +220,6 @@ public class BehaviorTreeTransformation {
         }
 
     }
-    
-    
-
-    // 1. Möglichkeit: Liste von Instantierungen weitergeben (oder als field)
-    //     -> Problem, was wenn mehrere Reaktoren einen anderen instantiieren
-    // 2. Möglichkeit: methode, die BT durchgeht und alle nodes abcheckt, ob die input haben wollen
-    //        -> ineffizient
-    // 3. Möglichkeit: Liste von Inputs durch ganze Transformation ziehen (oder als field)
-    //         -> wie dann an BTroot methode die initierungen geben
-    // 4. Möglichkeit: Liste von Connections
-    //          -> gib root Reactor weiter, dann braucht man auch keinen extra parameter (aber keine instantierungen)
-    // 5. Möglichkeit: FIELDS: 
-    //                      Es lohnt sich nicht, nur den Tasks Input zu geben, die danach fragen,
-    //                      weil man müsste die Sequence ganz durchgehen und gegebenfalls
-    //                      noch weiter tief gehen um zu wissen ob jetzige Sequence/Fallback
-    //                      auch den Input braucht (ineffizient)
-    //                      Man könnte sonst allen SeqFb den Input geben und dann prüfen ob ein child den
-    //                      Input braucht und wenn net dann den Input entfernen
-    //      var fwdInputs = new HashMap<Reactor, ArrayList<String>>();
-    //      und in schon geschriebenen Code hier die Instantierungen durch root durchgehen machen
-    //       ODER fwdInputs = new HashMap<HashMap<Reactor, Instant>, ArrayList<String>>();
-//    private void addBTInputConnections(Reactor rootNode, List<Reactor> newReactors) {
-//        for (Input input : rootNode.getInputs()) {
-//            for (Reactor r : newReactors) {
-//                if (!r.equals(rootNode)) {
-////              PROBLEM: keine Instantierungen mehr vorhanden
-//                }
-//            }       
-//        }
-//        
-//    }
 
     private Reactor transformNode(BehaviorTreeNode node, List<Reactor> newReactors, Reactor rootReactor) {
         if (node instanceof Sequence) {
@@ -288,8 +239,6 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
 
         setBTInterface(reactor);
-
-//        addBTInOutputs(rootReactor, reactor);
         
         // reaction will output failure, if any child produces failure
         Reaction reactionFailure = LFF.createReaction();
@@ -301,8 +250,6 @@ public class BehaviorTreeTransformation {
         reactionFailure.getEffects().add(failureEffect);
 
         int i = 0;
-//        Reactor lastReactor = reactor;
-//        Instantiation lastInstantiation = null;
         var last = new ReactorAndInst(reactor, null);
         var localSenders = new HashMap<String,ReactorAndInst>();
         for (var node : seq.getNodes()) {
@@ -323,14 +270,18 @@ public class BehaviorTreeTransformation {
                 reactorInputNames.add(reactorInput.getName());
             }
             for (Input rootInput : nodeReactor.getInputs()) {
-                boolean isLocal = rootInput.getLocal() != null;
+                
+                boolean isLocalAndIsInSameSequence = rootInput.getLocal() != null && 
+                                                        localSenders.containsKey(rootInput.getName()); 
+                
+                
                 if (!reactorInputNames.contains(rootInput.getName()) 
-                        && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                        && !isLocalAndIsInSameSequence) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
                 }
                 // Connect the inputs
-                if (!rootInput.getName().equals(START) && !isLocal) {
+                if (!rootInput.getName().equals(START) && !isLocalAndIsInSameSequence) {
                     var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
                     reactor.getConnections().add(inputConn);
                 }
@@ -340,22 +291,12 @@ public class BehaviorTreeTransformation {
             // add all inputs of childs to own inputs // make this a method (mit option zwischen input output) TODO
             var reactorOutputNames = new ArrayList<String>();
             for (Output reactorOutput : reactor.getOutputs()) {
-                reactorOutputNames.add(reactorOutput.getName());
+                reactorOutputNames.add(reactorOutput.getName()); // wieso net addAll?
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
                 
                 boolean isLocal = rootOutput.getLocal() != null;
-                // Vorteil: man muss nicht mehr durch alle Attributes gehen.
-//                for (var attr : rootOutput.getAttributes()) {
-//                    if (attr.getAttrName().equals("isLocal")) {
-//                        for (var attrparms : attr.getAttrParms()) {
-//                            if (attrparms.getName().equals("local")) {
-//                                isLocal = attrparms.getValue().getBool().equals("true");
-//                                
-//                            }
-//                        }
-//                    }
-//                }
+
                 if (!reactorOutputNames.contains(rootOutput.getName())
                         && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyOutput = EcoreUtil.copy(rootOutput);
@@ -391,6 +332,8 @@ public class BehaviorTreeTransformation {
             // TODO .getLocal() zu Bool machen.
 //             Map<Reactor, Instantiation> NEIN LIEBER ALS CLASS
             // Map<localName, Reactor>
+            
+            // FOR LOCALS IN SAME SEQUENCES
             for (Output output : nodeReactor.getOutputs()) {
                 var localSender = new ReactorAndInst(nodeReactor, instance);
                 if (output.getLocal() != null && output.getLocal().equals("true")) {
@@ -398,13 +341,18 @@ public class BehaviorTreeTransformation {
                 }
             }
             for (Input input : nodeReactor.getInputs()) {
-                if (input.getLocal() != null) {
+                boolean localSenderIsInSameSequence = localSenders.get(input.getName()) != null;
+                // mb noch if (input.getLocal() != null ? Oder ist eh automatisch auch local dann
+                if (localSenderIsInSameSequence) {
                     var localSender = localSenders.get(input.getName());
                     var conn = createConn(localSender.reactor, localSender.inst, input.getName(), nodeReactor, instance, input.getName());
                     reactor.getConnections().add(conn);
                 }
             }
-
+            
+            // for Locals NOT in same Sequence
+            // Nothing to do here? TODO recheck
+            
             last.reactor = nodeReactor;
             last.inst = instance;
             i++;
@@ -535,7 +483,6 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, btNodeAnnot);
         
         setBTInterface(reactor);
-//        addBTInOutputs(rootReactor, reactor);
         
         // set Inputs
         for (VarRef varref : task.getTaskSources()) {
@@ -561,12 +508,16 @@ public class BehaviorTreeTransformation {
         // set local outputs
         if (!(task.eContainer() instanceof BehaviorTree)) { // nötig weil nur dann gehen wir hier durch
             var allLocals = new ArrayList<Local>();
-            if (task.eContainer() instanceof Sequence) {
-                allLocals.addAll(((Sequence) task.eContainer()).getLocals());
-            } else {
-                allLocals.addAll(((Fallback) task.eContainer()).getLocals());
+            var seqOrFb = task.eContainer();
+            while (!(seqOrFb instanceof BehaviorTree)) {
+                if (seqOrFb instanceof Sequence) {
+                    allLocals.addAll(((Sequence) seqOrFb).getLocals());
+                    seqOrFb = seqOrFb.eContainer();
+                } else {
+                    allLocals.addAll(((Fallback) seqOrFb).getLocals());
+                    seqOrFb = seqOrFb.eContainer();
+                }
             }
-            
             for (VarRef varref : task.getTaskEffects()) {
                 if (varref.getVariable() instanceof Local) {
                     for (Local taskLocal : allLocals) {
@@ -575,17 +526,7 @@ public class BehaviorTreeTransformation {
                             localOutput.setName(varref.getVariable().getName());
                             var copyType = EcoreUtil.copy(taskLocal.getType());
                             localOutput.setType(copyType);
-                            
-                            // make this a method
-//                            var localAttr = LFF.createAttribute();
-//                            localAttr.setAttrName("isLocal");
-//                            var localAttrParam = LFF.createAttrParm();
-//                            localAttrParam.setName("local");
-//                            var localAttrParamVal = LFF.createAttrParmValue();
-//                            localAttrParamVal.setBool("true");
-//                            localAttrParam.setValue(localAttrParamVal);
-//                            localAttr.getAttrParms().add(localAttrParam);
-//                            localOutput.getAttributes().add(localAttr);
+
                             localOutput.setLocal("true");
                             
                             reactor.getOutputs().add(localOutput);
@@ -600,10 +541,16 @@ public class BehaviorTreeTransformation {
         // set local inputs
         if (!(task.eContainer() instanceof BehaviorTree)) {
             var allLocals = new ArrayList<Local>();
-            if (task.eContainer() instanceof Sequence) {
-                allLocals.addAll(((Sequence) task.eContainer()).getLocals());
-            } else {
-                allLocals.addAll(((Fallback) task.eContainer()).getLocals());
+            var seqOrFb = task.eContainer();
+            while (!(seqOrFb instanceof BehaviorTree)) {
+                if (seqOrFb instanceof Sequence) {
+                    allLocals.addAll(((Sequence) seqOrFb).getLocals());
+                    seqOrFb = seqOrFb.eContainer();
+                } else {
+                    allLocals.addAll(((Fallback) seqOrFb).getLocals());
+                    seqOrFb = seqOrFb.eContainer();
+
+                }                
             }
             
             for (VarRef varref : task.getTaskSources()) {
@@ -614,16 +561,7 @@ public class BehaviorTreeTransformation {
                             localInput.setName(varref.getVariable().getName());
                             var copyType = EcoreUtil.copy(taskLocal.getType());
                             localInput.setType(copyType);
-                            
-//                            var localAttr = LFF.createAttribute();
-//                            localAttr.setAttrName("local");
-//                            var localAttrParam = LFF.createAttrParm();
-//                            localAttrParam.setName("local");
-//                            var localAttrParamVal = LFF.createAttrParmValue();
-//                            localAttrParamVal.setBool("true");
-//                            localAttrParam.setValue(localAttrParamVal);
-//                            localAttr.getAttrParms().add(localAttrParam);
-//                            localInput.getAttributes().add(localAttr);
+
                             localInput.setLocal("true");
                             
                             reactor.getInputs().add(localInput);
