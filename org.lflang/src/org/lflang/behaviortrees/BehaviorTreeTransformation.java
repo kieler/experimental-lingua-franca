@@ -295,15 +295,15 @@ public class BehaviorTreeTransformation {
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
                 
-                boolean isLocal = rootOutput.getLocal() != null;
+                boolean isLocalAndIsInSameSequence = rootOutput.getLocal() != null && localSenders.containsKey(rootOutput.getName());
 
                 if (!reactorOutputNames.contains(rootOutput.getName())
-                        && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                        && !isLocalAndIsInSameSequence) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyOutput = EcoreUtil.copy(rootOutput);
                     reactor.getOutputs().add(copyOutput);
                 }
                 // Connect the Output
-                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE) && !isLocal) {
+                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE) && !isLocalAndIsInSameSequence) {
                     var outputConn = createConn(nodeReactor, instance, rootOutput.getName(), reactor, null, rootOutput.getName());
                     reactor.getConnections().add(outputConn);
                 }
@@ -432,15 +432,16 @@ public class BehaviorTreeTransformation {
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
                 
-                boolean isLocal = rootOutput.getLocal() != null;
+                boolean isLocalAndIsInSameFallback = rootOutput.getLocal() != null && 
+                        localSenders.containsKey(rootOutput.getName()); 
 
                 if (!reactorOutputNames.contains(rootOutput.getName())
-                        && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                        && !isLocalAndIsInSameFallback) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyOutput = EcoreUtil.copy(rootOutput);
                     reactor.getOutputs().add(copyOutput);
                 }
                 // Connect the Output
-                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE) && !isLocal) {
+                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE) && !isLocalAndIsInSameFallback) {
                     var outputConn = createConn(nodeReactor, instance, rootOutput.getName(), reactor, null, rootOutput.getName());
                     reactor.getConnections().add(outputConn);
                 }
