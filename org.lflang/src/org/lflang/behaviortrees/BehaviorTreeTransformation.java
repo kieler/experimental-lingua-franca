@@ -160,15 +160,8 @@ public class BehaviorTreeTransformation {
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
-        // Init set all inputs and outputs from bt LF structur
-        for(Input input : bt.getInputs()) {
-            var copyInput = EcoreUtil.copy(input);
-            reactor.getInputs().add(copyInput);
-        }
-        for (Output output : bt.getOutputs()) {
-            var copyOutput = EcoreUtil.copy(output);
-            reactor.getOutputs().add(copyOutput);
-        }
+        // Init set all inputs and outputs from declared bt. 
+        copyInOutputs(reactor, bt.getInputs(), bt.getOutputs());
         
         // Transform BT root
         var deleteThis = bt.getRootNode(); // makes debugging easier (temporary)
@@ -180,27 +173,32 @@ public class BehaviorTreeTransformation {
 
         // forward in and outputs of mock reactor to BT root node
         connectInOutputs(reactor, nodeReactor, instance);
-
-        var connStart = createConn(reactor, null, START, nodeReactor, instance, START);
-        reactor.getConnections().add(connStart);
-        var connSuccess = createConn(nodeReactor, instance, SUCCESS, reactor, null, SUCCESS);
-        reactor.getConnections().add(connSuccess);
-        var connFailure = createConn(nodeReactor, instance, FAILURE, reactor, null, FAILURE);
-        reactor.getConnections().add(connFailure);
         
         return reactor;
     }
     
+    private void copyInOutputs (Reactor reactor, List<Input> inputs, List<Output> outputs) {
+        for (Input input : inputs) {
+            var copyInput = EcoreUtil.copy(input);
+            reactor.getInputs().add(copyInput);
+        }
+        
+        for (Output output : outputs) {
+            var copyOutput = EcoreUtil.copy(output);
+            reactor.getOutputs().add(copyOutput);
+        }
+    }
+    
     private void connectInOutputs(Reactor reactor, Reactor childReactor,
             Instantiation instance) {
-        
+        // TODO fun mapping?
         var childInputNames = new ArrayList<String>();
         for (Input inputChild : childReactor.getInputs()) {
             childInputNames.add(inputChild.getName());
         }
         
         for (Input in : reactor.getInputs()) {
-            if (!in.getName().equals(START) && childInputNames.contains(in.getName())) {  //TODO !mb start signal aus transformBTree rausnehmen und hier rein
+            if (childInputNames.contains(in.getName())) {
                 var conn = createConn(reactor, null, in.getName(), childReactor, instance, in.getName());
                 reactor.getConnections().add(conn);                
             }
@@ -212,7 +210,7 @@ public class BehaviorTreeTransformation {
         }
 
         for (Output out : reactor.getOutputs()) {
-            if (!out.getName().equals(SUCCESS) && !out.getName().equals(FAILURE) && childOutputNames.contains(out.getName())) {
+            if (childOutputNames.contains(out.getName())) {
                 var conn = createConn(childReactor, instance, out.getName(), reactor, null, out.getName());
                 reactor.getConnections().add(conn);
                 
@@ -233,6 +231,8 @@ public class BehaviorTreeTransformation {
     }
 
     private Reactor transformSequence(Sequence seq, List<Reactor> newReactors, Reactor rootReactor) {
+        // TODO LÖSUNG FÜR BESSERE PERFORMANCE: LISTE MIT INPUTS UND OUTPUTS
+        var inputs = new ArrayList<Input>();
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName("NodeSequence" + nodeNameCounter++);
@@ -291,7 +291,7 @@ public class BehaviorTreeTransformation {
             // add all inputs of childs to own inputs // make this a method (mit option zwischen input output) TODO
             var reactorOutputNames = new ArrayList<String>();
             for (Output reactorOutput : reactor.getOutputs()) {
-                reactorOutputNames.add(reactorOutput.getName()); // wieso net addAll?
+                reactorOutputNames.add(reactorOutput.getName()); // wieso net addAll weil wir müssen namen machen?
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
                 
@@ -370,13 +370,12 @@ public class BehaviorTreeTransformation {
     private Reactor transformFallback(Fallback fb, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Node" + nodeNameCounter++);
+        reactor.setName("NodeFallback" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.FALLBACK.toString());
 
         setBTInterface(reactor);
-//        addBTInOutputs(rootReactor, reactor);
 
-        // reaction will output failure, if any child produces failure
+        // reaction will output success, if any child produces success
         Reaction reactionSuccess = LFF.createReaction();
         Code successCode = LFF.createCode();
         successCode.setBody("lf_set(success, true);");
@@ -386,8 +385,8 @@ public class BehaviorTreeTransformation {
         reactionSuccess.getEffects().add(successEffect);
 
         int i = 0;
-        Reactor lastReactor = reactor;
-        Instantiation lastInstantiation = null;
+        var last = new ReactorAndInst(reactor, null);
+        var localSenders = new HashMap<String,ReactorAndInst>();
         for (var node : fb.getNodes()) {
             var nodeReactor = transformNode(node, newReactors, rootReactor);
             
@@ -396,21 +395,30 @@ public class BehaviorTreeTransformation {
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
-            instance.setName("node" + fb.getNodes().indexOf(node));
+            instance.setName("nodeFallbackInst" + fb.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
             
          // add all inputs of childs to own inputs
+         // TODO connect locals
+            // add all inputs of childs to own inputs TODO if they are not locals
+            // man muss noch zwischen Effect und Source unterscheiden
             var reactorInputNames = new ArrayList<String>();
             for (Input reactorInput : reactor.getInputs()) {
                 reactorInputNames.add(reactorInput.getName());
             }
             for (Input rootInput : nodeReactor.getInputs()) {
-                if (!reactorInputNames.contains(rootInput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                
+                boolean isLocalAndIsInSameSequence = rootInput.getLocal() != null && 
+                                                        localSenders.containsKey(rootInput.getName()); 
+                
+                
+                if (!reactorInputNames.contains(rootInput.getName()) 
+                        && !isLocalAndIsInSameSequence) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyInput = EcoreUtil.copy(rootInput);
                     reactor.getInputs().add(copyInput);
                 }
                 // Connect the inputs
-                if (!rootInput.getName().equals(START)) {
+                if (!rootInput.getName().equals(START) && !isLocalAndIsInSameSequence) {
                     var inputConn = createConn(reactor, null, rootInput.getName(), nodeReactor, instance, rootInput.getName());
                     reactor.getConnections().add(inputConn);
                 }
@@ -420,15 +428,19 @@ public class BehaviorTreeTransformation {
             // add all inputs of childs to own inputs // make this a method (mit option zwischen input output) TODO
             var reactorOutputNames = new ArrayList<String>();
             for (Output reactorOutput : reactor.getOutputs()) {
-                reactorOutputNames.add(reactorOutput.getName());
+                reactorOutputNames.add(reactorOutput.getName()); // wieso net addAll weil wir müssen namen machen?
             }
             for (Output rootOutput : nodeReactor.getOutputs()) {
-                if (!reactorOutputNames.contains(rootOutput.getName())) { //TODO ineffizient, mb: liste, die dann am ende added wird
+                
+                boolean isLocal = rootOutput.getLocal() != null;
+
+                if (!reactorOutputNames.contains(rootOutput.getName())
+                        && !isLocal) { //TODO ineffizient, mb: liste, die dann am ende added wird
                     var copyOutput = EcoreUtil.copy(rootOutput);
                     reactor.getOutputs().add(copyOutput);
                 }
                 // Connect the Output
-                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE)) {
+                if (!rootOutput.getName().equals(SUCCESS) && !rootOutput.getName().equals(FAILURE) && !isLocal) {
                     var outputConn = createConn(nodeReactor, instance, rootOutput.getName(), reactor, null, rootOutput.getName());
                     reactor.getConnections().add(outputConn);
                 }
@@ -449,17 +461,39 @@ public class BehaviorTreeTransformation {
                 reactor.getConnections().add(connStart);
             } else if (i < fb.getNodes().size()) {
                 // if non-last task was successful start next task 
-                var connForward = createConn(lastReactor, lastInstantiation,
+                var connForward = createConn(last.reactor, last.inst,
                         FAILURE, nodeReactor, instance, START);
                 reactor.getConnections().add(connForward);
             }
-
-            lastReactor = nodeReactor;
-            lastInstantiation = instance;
+         // HOW TO DO CONNECTIONS? TODO: was tun wenn mehrere gleichen local haben?
+            // TODO .getLocal() zu Bool machen.
+//             Map<Reactor, Instantiation> NEIN LIEBER ALS CLASS
+            // Map<localName, Reactor>
+            
+            // FOR LOCALS IN SAME SEQUENCES
+            for (Output output : nodeReactor.getOutputs()) {
+                var localSender = new ReactorAndInst(nodeReactor, instance);
+                if (output.getLocal() != null && output.getLocal().equals("true")) {
+                    localSenders.put(output.getName(), localSender);
+                }
+            }
+            for (Input input : nodeReactor.getInputs()) {
+                boolean localSenderIsInSameSequence = localSenders.get(input.getName()) != null;
+                // mb noch if (input.getLocal() != null ? Oder ist eh automatisch auch local dann
+                if (localSenderIsInSameSequence) {
+                    var localSender = localSenders.get(input.getName());
+                    var conn = createConn(localSender.reactor, localSender.inst, input.getName(), nodeReactor, instance, input.getName());
+                    reactor.getConnections().add(conn);
+                }
+            }
+            
+            
+            last.reactor = nodeReactor;
+            last.inst = instance;
             i++;
         }
         // if last tasks output failure, then fallback will output failure
-        var connFailure = createConn(lastReactor, lastInstantiation, FAILURE,
+        var connFailure = createConn(last.reactor, last.inst, FAILURE,
                 reactor, null, FAILURE);
         reactor.getConnections().add(connFailure);
 
@@ -664,15 +698,6 @@ public class BehaviorTreeTransformation {
         param.setValue(value);
         reactor.getAttributes().add(attr);
     }
-    
-//    private boolean inputExistent(Reactor r, String portName) {
-//        for (Input input : r.getInputs()) {
-//            if(input.getName().equals(portName)) {
-//                return true;
-//            }
-//        }
-//        return false;
-//    }
 
     private VarRef createRef(Reactor r, Instantiation i, String portName) {
         var ref = LFF.createVarRef();
