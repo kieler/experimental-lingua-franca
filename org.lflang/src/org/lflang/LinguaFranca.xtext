@@ -123,7 +123,7 @@ BehaviorTree:
     (attributes+=Attribute)*
     'btree' (name=ID)?
     '{'
-    ((inputs+=Input) | (outputs+=Output))* 
+    ((inputs+=Input) | (outputs+=Output))*  // locals hinzufügen
     rootNode=BehaviorTreeNode?
     '}'                                            
 ;
@@ -145,7 +145,7 @@ Task:
 //    (attributes+=Attribute)* mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
 
 Local:
-    {Local}
+    {Local}                 // delete this
     (attributes+=Attribute)* mutable?='mutable'? 'local' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
 ;
 

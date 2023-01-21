@@ -28,8 +28,11 @@ package org.lflang.behaviortrees;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -234,11 +237,11 @@ public class BehaviorTreeTransformation {
     }
 
     private Reactor transformSequence(Sequence seq, List<Reactor> newReactors, Reactor rootReactor) {
-        // TODO LÖSUNG FÜR BESSERE PERFORMANCE: LISTE MIT INPUTS UND OUTPUTS
-        var inputs = new ArrayList<Input>();
+        // TODO LÖSUNG FÜR BESSERE PERFORMANCE: LISTE MIT INPUTS UND OUTPUTS    var inputs = new ArrayList<Input>();
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("NodeSequence" + nodeNameCounter++);
+        boolean sequenceIsRoot = nodeNameCounter == 0; 
+        reactor.setName("Sequence" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
 
         setBTInterface(reactor);
@@ -246,14 +249,14 @@ public class BehaviorTreeTransformation {
         // reaction will output failure, if any child produces failure
         var reactionFailure = LFF.createReaction();
         var failureCode = LFF.createCode();
-        failureCode.setBody("lf_set(failure, true);");
+        failureCode.setBody("SET(failure, true);");
         reactionFailure.setCode(failureCode);
         var failureEffect = createRef(reactor, null, FAILURE);
         reactionFailure.getEffects().add(failureEffect);
 
         int i = 0;
-        var last = new ReactorAndInst(reactor, null);
-        var localSenders = new HashMap<String,ReactorAndInst>();
+        var last = new ReactorAndInst(reactor, null); // kann wieder lastR und lastIn sein
+        var localSenders = new TreeMap<String,TriggerRefsAndEffectRefs>(); // TreeMap um die Reihenfolge zu behalten
         var sequentialOutputs = new HashMap<String, ArrayList<VarRef>>();
         for (var node : seq.getNodes()) {
             var nodeReactor = transformNode(node, newReactors, rootReactor);
@@ -261,7 +264,7 @@ public class BehaviorTreeTransformation {
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
-            instance.setName("inst" + seq.getNodes().indexOf(node));
+            instance.setName("SeqInst" + seq.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
             
             // add all inputs of childs to own inputs TODO if they are not locals
@@ -304,19 +307,20 @@ public class BehaviorTreeTransformation {
 //                }
                 
                 if (!nodeOutput.getName().equals(SUCCESS) && !nodeOutput.getName().equals(FAILURE)) {
-                    if (!reactorOutputNames.contains(nodeOutput.getName()) && !isInSameSequence) { // TODO ineffizient
-                        var copyOutput = EcoreUtil.copy(nodeOutput);
-                        reactor.getOutputs().add(copyOutput);
-                    }
-                    
-                    var varrefList = sequentialOutputs.get(nodeOutput.getName());
-                    if (varrefList == null) {
-                        varrefList = new ArrayList<VarRef>();
-                        varrefList.add(createRef(nodeReactor, instance, nodeOutput.getName()));
-                        sequentialOutputs.put(nodeOutput.getName(), varrefList);
-                    } else {
-                        varrefList.add(createRef(nodeReactor, instance, nodeOutput.getName()));
-                        sequentialOutputs.put(nodeOutput.getName(), varrefList);
+                    if (!sequenceIsRoot || nodeOutput.getLocal() == null) {
+                        if (!reactorOutputNames.contains(nodeOutput.getName()) && !isInSameSequence) {
+                            var copyOutput = EcoreUtil.copy(nodeOutput);
+                            reactor.getOutputs().add(copyOutput);
+                        }
+                        var varrefList = sequentialOutputs.get(nodeOutput.getName());
+                        if (varrefList == null) {
+                            varrefList = new ArrayList<VarRef>();
+                            varrefList.add(createRef(nodeReactor, instance, nodeOutput.getName()));
+                            sequentialOutputs.put(nodeOutput.getName(), varrefList);
+                        } else {
+                            varrefList.add(createRef(nodeReactor, instance, nodeOutput.getName()));
+                            sequentialOutputs.put(nodeOutput.getName(), varrefList);
+                        }
                     }
                 }
             }
@@ -347,19 +351,39 @@ public class BehaviorTreeTransformation {
             
             // FOR LOCALS IN SAME SEQUENCES
             for (Output nodeOutput : nodeReactor.getOutputs()) {
-                if (nodeOutput.getLocal() != null && nodeOutput.getLocal().equals("true")) {
-                    var localSender = new ReactorAndInst(nodeReactor, instance);
-                    localSenders.put(nodeOutput.getName(), localSender);
+                if (nodeOutput.getLocal() != null) {
+                    var varrefList = localSenders.get(nodeOutput.getName());
+                    if (varrefList == null) {
+                        varrefList = new TriggerRefsAndEffectRefs();
+                        varrefList.triggerRefs.add(createRef(nodeReactor, instance, nodeOutput.getName()));
+                        localSenders.put(nodeOutput.getName(), varrefList);
+                    } else {
+                        varrefList.triggerRefs.add(createRef(nodeReactor, instance, nodeOutput.getName()));
+                        localSenders.put(nodeOutput.getName(), varrefList);
+                    }
                 }
             }
             for (Input nodeInput : nodeReactor.getInputs()) {
-                boolean localSenderIsInSameSequence = localSenders.get(nodeInput.getName()) != null;
-                // mb noch if (input.getLocal() != null ? Oder ist eh automatisch auch local dann
-                if (localSenderIsInSameSequence) {
-                    var localSender = localSenders.get(nodeInput.getName());
-                    var conn = createConn(localSender.reactor, localSender.inst, nodeInput.getName(), nodeReactor, instance, nodeInput.getName());
-                    reactor.getConnections().add(conn);
+                if (nodeInput.getLocal() != null) {
+//                    boolean localSenderIsInSameSequence = localSenders.get(nodeInput.getName()) != null;
+                    var varrefList = localSenders.get(nodeInput.getName());
+                    if (varrefList == null) {
+                        int a = 10;
+                        int b = 20;
+                        // kann net sein, weil d.h. dass der local Input gelesen wird, bevor er geschrieben wurde TODO
+                        // NEIN KANN SEIN, S.h. LocalScopeTest
+                    } else {
+                        varrefList.effectRefs.add(createRef(nodeReactor, instance, nodeInput.getName()));
+                        localSenders.put(nodeInput.getName(), varrefList);
+                    }
+                    
                 }
+                // mb noch if (input.getLocal() != null ? Oder ist eh automatisch auch local dann
+//                if (localSenderIsInSameSequence) {
+//                    var localSender = localSenders.get(nodeInput.getName());
+////                    var conn = createConn(localSender.reactor, localSender.inst, nodeInput.getName(), nodeReactor, instance, nodeInput.getName());
+////                    reactor.getConnections().add(conn);
+//                }
             }
             // for Locals NOT in same Sequence
             // Nothing to do here? TODO recheck
@@ -373,59 +397,113 @@ public class BehaviorTreeTransformation {
                 reactor, null, SUCCESS);
         reactor.getConnections().add(connSuccess);
 
-        reactor.getReactions().add(reactionFailure);
         
-//      Reaction reactionFailure = LFF.createReaction();
-//      Code failureCode = LFF.createCode();
-//      failureCode.setBody("lf_set(failure, true);");
-//      reactionFailure.setCode(failureCode);
-//      var failureEffect = createRef(reactor, null, FAILURE);
-//      reactionFailure.getEffects().add(failureEffect);
+        
+        // LOCALS IN SAME SEQUENCE!
+//        Map<String,  TriggerRefsAndEffectRefs> reverseOrder = localSenders.descendingMap();
+        for(var entry : localSenders.entrySet()) {
+            var varrefList = entry.getValue();
+            var reaction = LFF.createReaction();
+            
+//            var reactorOutputNames = reactor.getOutputs().stream().map(x -> x.getName()).collect(Collectors.toList());
+//            if (reactorOutputNames.contains(entry.getKey())) {
+//                var seqVarref = createRef(reactor, null, entry.getKey());
+//                reaction.getEffects().add(seqVarref);
+////                entry.getValue().effectRefs.add(seqVarref);
+//            }
+            
+            for (var varref : entry.getValue().effectRefs) {
+                reaction.getEffects().add(varref);
+            }
+            
+            for (var varref : entry.getValue().triggerRefs) {
+                reaction.getTriggers().add(varref);
+            }
+            
+            Collections.reverse(varrefList.triggerRefs);
+            String codeContent = createLocalOutputCode(varrefList);
+            var code = LFF.createCode();
+            code.setBody(codeContent);
+            reaction.setCode(code);
+            reactor.getReactions().add(reaction);
+        }
+        
       for (var entry : sequentialOutputs.entrySet()) {
-          var varrefList = entry.getValue();
-          var reaction = LFF.createReaction();
-          
-          var effect = createRef(reactor, null, entry.getKey());// TODO check ob man das einfach unten reinmachen kann.
-          reaction.getEffects().add(effect);
-          
-          // TODO mb überall var hinmachen bei for statement
-          for (var varref : varrefList) {
-              reaction.getTriggers().add(varref);
+          // WIR WOLLEN, dass das nicht für LOCALS gemacht wird
+          for (var reactorOutput : reactor.getOutputs()) {
+              if (entry.getKey().equals(reactorOutput.getName())) {
+                  var varrefList = entry.getValue();
+                  var reaction = LFF.createReaction();
+                  
+                  var effect = createRef(reactor, null, entry.getKey());// TODO check ob man das einfach unten reinmachen kann.
+                  reaction.getEffects().add(effect);
+                  
+                  // TODO mb überall var hinmachen bei for statement
+                  for (var varref : varrefList) {
+                      reaction.getTriggers().add(varref);
+                  }
+                  Collections.reverse(varrefList);
+                  String codeContent = createOutputCode(varrefList);
+                  var code = LFF.createCode();
+                  code.setBody(codeContent);
+                  reaction.setCode(code);
+                  reactor.getReactions().add(reaction);
+              }
           }
-          Collections.reverse(varrefList);
-          String codeContent = createOutputCode(varrefList);
-          var code = LFF.createCode();
-          code.setBody(codeContent);
-          reaction.setCode(code);
-          reactor.getReactions().add(reaction);
       }
-        
+       
+      reactor.getReactions().add(reactionFailure);
 
         return reactor;
     }
     
-    private String createOutputCode(ArrayList<VarRef> varrefList) {
-        var firstvarref = varrefList.remove(0);
-        String outputName = firstvarref.getVariable().getName();
-        String instanceName = firstvarref.getContainer().getName();
-        String setOutputCode = "SET(" + outputName + ", " + instanceName + "." + outputName + "->value);";
-        
-        String result = "if(" + instanceName + "." + outputName + "->is_present){ \n\t"
-                              + setOutputCode + "\n}";
-        for (VarRef varref : varrefList) {
-            instanceName = varref.getContainer().getName();
-            setOutputCode = "SET(" + outputName + ", " + instanceName + "." + outputName + "->value);";
-            
-            result += " else if(" + instanceName + "." + outputName + "->is_present" + "){ \n\t"
-                    + setOutputCode + "\n}\n"; // faster than concat
+    private String createLocalOutputCode(TriggerRefsAndEffectRefs varrefList) {
+        String result = "";
+        String outputName = varrefList.triggerRefs.get(0).getVariable().getName();
+        String ifOrElseIf = "if(";
+        for (var trigger : varrefList.triggerRefs) {
+            String instNameTrigger = trigger.getContainer().getName();
+            result += ifOrElseIf +  instNameTrigger + "." + outputName + "->is_present) {//local\n    ";
+            for (var effect : varrefList.effectRefs) {
+                String instNameEffect = effect.getContainer().getName();
+                Type type = null;
+                if (effect.getVariable() instanceof Output) { 
+                    type = ((Output) effect.getVariable()).getType(); 
+                } else if (effect.getVariable() instanceof Input) {
+                    type = ((Input) effect.getVariable()).getType();
+                }
+                String setFunc = (type.getArraySpec() == null) ? "SET(" : "lf_set_array(";  // TODO es gibt bestimmt mehr als nur arrays // TODO und auch für arrays noch net fertig
+                result += setFunc + instNameEffect + "." + outputName + ", " + instNameTrigger + "." + outputName + "->value);\n    ";
+            }
+            result = result.substring(0, result.length()-4) + "}\n";  // DELETE INDENTATION FOR outputSetter
+            ifOrElseIf = " else if(";
         }
+        return result;
+    }
+
+ // Wenn varref kein getter auf variable->type
+    private String createOutputCode(ArrayList<VarRef> varrefList) {
+        String result = "";
+        String outputName = varrefList.get(0).getVariable().getName();
+        String ifOrElseIf = "if(";
+        for (var varref : varrefList) {
+            String instanceName = varref.getContainer().getName();
+            Type type = null;
+            if (varref.getVariable() instanceof Output) { type = ((Output) varref.getVariable()).getType(); }
+            String setFunc = (type.getArraySpec() == null) ? "SET(" : "lf_set_array(";  // TODO es gibt bestimmt mehr als nur arrays
+            String settersCode = setFunc + outputName + ", " + instanceName + "." + outputName + "->value);";
+            
+            result += ifOrElseIf + instanceName + "." + outputName + "->is_present){\n    " + settersCode + "\n}";
+            ifOrElseIf = " else if(";
+        }
+        
         return result;
     }
     
     private Reactor transformFallback(Fallback fb, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("NodeFallback" + nodeNameCounter++);
+        reactor.setName("Fallback" + nodeNameCounter++);
         addBTNodeAnnotation(reactor, NodeType.FALLBACK.toString());
 
         setBTInterface(reactor);
@@ -449,7 +527,7 @@ public class BehaviorTreeTransformation {
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
-            instance.setName("nodeFallbackInst" + fb.getNodes().indexOf(node));
+            instance.setName("inst" + fb.getNodes().indexOf(node));
             reactor.getInstantiations().add(instance);
             
          // add all inputs of childs to own inputs
@@ -564,31 +642,25 @@ public class BehaviorTreeTransformation {
         reactor.getConnections().add(connFailure);
 
         reactor.getReactions().add(reactionSuccess);
-        
-//      Reaction reactionFailure = LFF.createReaction();
-//      Code failureCode = LFF.createCode();
-//      failureCode.setBody("lf_set(failure, true);");
-//      reactionFailure.setCode(failureCode);
-//      var failureEffect = createRef(reactor, null, FAILURE);
-//      reactionFailure.getEffects().add(failureEffect);
-      for (var entry : sequentialOutputs.entrySet()) {
-          var varrefList = entry.getValue();
-          var reaction = LFF.createReaction();
-          
-          var effect = createRef(reactor, null, entry.getKey());// TODO check ob man das einfach unten reinmachen kann.
-          reaction.getEffects().add(effect);
-          
-          // TODO mb überall var hinmachen bei for statement
-          for (var varref : varrefList) {
-              reaction.getTriggers().add(varref);
-          }
-          Collections.reverse(varrefList);
-          String codeContent = createOutputCode(varrefList);
-          var code = LFF.createCode();
-          code.setBody(codeContent);
-          reaction.setCode(code);
-          reactor.getReactions().add(reaction);
-      }
+
+        for (var entry : sequentialOutputs.entrySet()) {
+            var varrefList = entry.getValue();
+            var reaction = LFF.createReaction();
+
+            var effect = createRef(reactor, null, entry.getKey());// TODO check ob man das einfachn unten reinmachen kann 
+            reaction.getEffects().add(effect);
+
+            // TODO mb überall var hinmachen bei for statement
+            for (var varref : varrefList) {
+                reaction.getTriggers().add(varref);
+            }
+            Collections.reverse(varrefList);
+            String codeContent = createOutputCode(varrefList);
+            var code = LFF.createCode();
+            code.setBody(codeContent);
+            reaction.setCode(code);
+            reactor.getReactions().add(reaction);
+        }
         
 
         return reactor;
@@ -623,7 +695,7 @@ public class BehaviorTreeTransformation {
         }
         // set outputs
         for (VarRef varref : task.getTaskEffects()) {
-            for (Output rootOutput : rootReactor.getOutputs()) {
+            for (Output rootOutput : rootReactor.getOutputs()) { // GAR NICHT NÖTIG SINCE VARREF.get VAR ZU OUTPUT CASTEN TODO
                 if (varref.getVariable().getName().equals(rootOutput.getName())) {   //TODO ineffizient
                     // copy the input (wenn cpy net geht mach wie bei setBTInterface)
                     var copyOutput = EcoreUtil.copy(rootOutput);
@@ -816,7 +888,7 @@ public class BehaviorTreeTransformation {
             return null;
         }
     }
-    class ReactorAndInst {
+    class ReactorAndInst { // kann man eig wieder entfernen weil localSenders weg ist
         Reactor reactor = null;
         Instantiation inst = null;
         
@@ -824,5 +896,9 @@ public class BehaviorTreeTransformation {
             this.reactor = reactor;
             this.inst = instantiation;
         }
+    }
+    class TriggerRefsAndEffectRefs {
+        ArrayList<VarRef> triggerRefs = new ArrayList<VarRef>();
+        ArrayList<VarRef> effectRefs = new ArrayList<VarRef>();;
     }
 }
