@@ -251,8 +251,7 @@ public class BehaviorTreeTransformation {
         var failureCode = LFF.createCode();
         failureCode.setBody("SET(failure, true);");
         reactionFailure.setCode(failureCode);
-        var failureEffect = createRef(reactor, null, FAILURE);
-        reactionFailure.getEffects().add(failureEffect);
+        reactionFailure.getEffects().add(createRef(reactor, null, FAILURE));
 
         int i = 0;
         var last = new ReactorAndInst(reactor, null); // kann wieder lastR und lastIn sein
@@ -264,7 +263,7 @@ public class BehaviorTreeTransformation {
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
-            instance.setName("SeqInst" + seq.getNodes().indexOf(node));
+            instance.setName(nodeReactor.getName() + "_i");
             reactor.getInstantiations().add(instance);
             
             // add all inputs of childs to own inputs TODO if they are not locals
@@ -296,15 +295,6 @@ public class BehaviorTreeTransformation {
                 
                 boolean isInSameSequence = localSenders.containsKey(nodeOutput.getName());
 
-//                if (!reactorOutputNames.contains(nodeOutput.getName()) && !isInSameSequence) { //TODO ineffizient, mb: liste, die dann am ende added wird
-//                    var copyOutput = EcoreUtil.copy(nodeOutput);
-//                    reactor.getOutputs().add(copyOutput);
-//                }
-                // Connect the Output
-//                if (!nodeOutput.getName().equals(SUCCESS) && !nodeOutput.getName().equals(FAILURE) && !isInSameSequence) {
-//                    var outputConn = createConn(nodeReactor, instance, nodeOutput.getName(), reactor, null, nodeOutput.getName());
-//                    reactor.getConnections().add(outputConn);
-//                }
                 
                 if (!nodeOutput.getName().equals(SUCCESS) && !nodeOutput.getName().equals(FAILURE)) {
                     if (!sequenceIsRoot || nodeOutput.getLocal() == null) {
@@ -344,9 +334,7 @@ public class BehaviorTreeTransformation {
                 reactor.getConnections().add(connForward);
             }
             
-            // HOW TO DO CONNECTIONS? TODO: was tun wenn mehrere gleichen local haben?
             // TODO .getLocal() zu Bool machen.
-//             Map<Reactor, Instantiation> NEIN LIEBER ALS CLASS
             // Map<localName, Reactor>
             
             // FOR LOCALS IN SAME SEQUENCES
@@ -378,15 +366,7 @@ public class BehaviorTreeTransformation {
                     }
                     
                 }
-                // mb noch if (input.getLocal() != null ? Oder ist eh automatisch auch local dann
-//                if (localSenderIsInSameSequence) {
-//                    var localSender = localSenders.get(nodeInput.getName());
-////                    var conn = createConn(localSender.reactor, localSender.inst, nodeInput.getName(), nodeReactor, instance, nodeInput.getName());
-////                    reactor.getConnections().add(conn);
-//                }
             }
-            // for Locals NOT in same Sequence
-            // Nothing to do here? TODO recheck
             
             last.reactor = nodeReactor;
             last.inst = instance;
@@ -402,30 +382,32 @@ public class BehaviorTreeTransformation {
         // LOCALS IN SAME SEQUENCE!
 //        Map<String,  TriggerRefsAndEffectRefs> reverseOrder = localSenders.descendingMap();
         for(var entry : localSenders.entrySet()) {
-            var varrefList = entry.getValue();
-            var reaction = LFF.createReaction();
-            
+            if (!entry.getValue().effectRefs.isEmpty()) {
+                var triggsAndEffcs = entry.getValue();
+                var reaction = LFF.createReaction();
+                
 //            var reactorOutputNames = reactor.getOutputs().stream().map(x -> x.getName()).collect(Collectors.toList());
 //            if (reactorOutputNames.contains(entry.getKey())) {
 //                var seqVarref = createRef(reactor, null, entry.getKey());
 //                reaction.getEffects().add(seqVarref);
 ////                entry.getValue().effectRefs.add(seqVarref);
 //            }
-            
-            for (var varref : entry.getValue().effectRefs) {
-                reaction.getEffects().add(varref);
+                
+                for (var varref : entry.getValue().effectRefs) {
+                    reaction.getEffects().add(varref);
+                }
+                
+                for (var varref : entry.getValue().triggerRefs) {
+                    reaction.getTriggers().add(varref);
+                }
+                
+                Collections.reverse(triggsAndEffcs.triggerRefs);
+                String codeContent = createLocalOutputCode(triggsAndEffcs);
+                var code = LFF.createCode();
+                code.setBody(codeContent);
+                reaction.setCode(code);
+                reactor.getReactions().add(reaction);
             }
-            
-            for (var varref : entry.getValue().triggerRefs) {
-                reaction.getTriggers().add(varref);
-            }
-            
-            Collections.reverse(varrefList.triggerRefs);
-            String codeContent = createLocalOutputCode(varrefList);
-            var code = LFF.createCode();
-            code.setBody(codeContent);
-            reaction.setCode(code);
-            reactor.getReactions().add(reaction);
         }
         
       for (var entry : sequentialOutputs.entrySet()) {
@@ -457,14 +439,14 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
     
-    private String createLocalOutputCode(TriggerRefsAndEffectRefs varrefList) {
+    private String createLocalOutputCode(TriggerRefsAndEffectRefs triggsAndEffcs) {
         String result = "";
-        String outputName = varrefList.triggerRefs.get(0).getVariable().getName();
+        String outputName = triggsAndEffcs.triggerRefs.get(0).getVariable().getName();
         String ifOrElseIf = "if(";
-        for (var trigger : varrefList.triggerRefs) {
+        for (var trigger : triggsAndEffcs.triggerRefs) {
             String instNameTrigger = trigger.getContainer().getName();
             result += ifOrElseIf +  instNameTrigger + "." + outputName + "->is_present) {//local\n    ";
-            for (var effect : varrefList.effectRefs) {
+            for (var effect : triggsAndEffcs.effectRefs) {
                 String instNameEffect = effect.getContainer().getName();
                 Type type = null;
                 if (effect.getVariable() instanceof Output) { 
