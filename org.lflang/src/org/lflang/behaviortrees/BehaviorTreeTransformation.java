@@ -295,7 +295,7 @@ public class BehaviorTreeTransformation {
                             // What to do here when Task versucht ein Local zu lesen welche noch nie gesendet
                             // DAS HEIßt Local von außen holen!!! TODO
                            } else {
-                               String localNameWriteLock = "";
+                               String localNameWriteLock = keyName;
                                if (keyName.charAt(0) != '#') {
                                    localSenders.remove(keyName);
                                    localNameWriteLock = "#" + keyName;
@@ -335,8 +335,13 @@ public class BehaviorTreeTransformation {
                             triggsAndEffcs = new TriggerAndEffectRefs();
                         } else if (keyName.charAt(0) == '#'){
                             localReactions.add(triggsAndEffcs);
-                            localSenders.remove(keyName);
                             triggsAndEffcs = new TriggerAndEffectRefs();
+                            for (var trigger : localSenders.get(keyName).triggerRefs) {
+                                var copyTrigger = EcoreUtil.copy(trigger);
+                                triggsAndEffcs.triggerRefs.add(copyTrigger);
+                            }
+//                            triggsAndEffcs.triggerRefs.addAll(localSenders.get(keyName).triggerRefs); KRASSER BUG
+                            localSenders.remove(keyName);
                             
                         }
                         triggsAndEffcs.triggerRefs.add(createRef(nodeReactor, instance, outputName));
@@ -408,6 +413,9 @@ public class BehaviorTreeTransformation {
                 reactor, null, SUCCESS);
         reactor.getConnections().add(connSuccess);
 
+        for (var entry : localSenders.entrySet()) {
+            localReactions.add(entry.getValue());
+        }
         
      // LOCALS IN SAME SEQUENCE! change this to generic
         for (var triggsAndEffcs : localReactions) {
