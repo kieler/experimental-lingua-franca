@@ -129,7 +129,7 @@ BehaviorTree:
 ;
 
 BehaviorTreeNode:
-    Task | Sequence | Fallback
+    Task | Sequence | Fallback | Parallel
 ;
 
 Task:
@@ -165,30 +165,12 @@ Fallback:
     '}'    
 ;
 
-//Task:
-//    {Task}
-////    (attributes+=Attribute)*
-//    ('task'|'action'|condition?='condition')
-//        (taskName=STRING)?
-//        (taskSources+=STRING (',' taskSources+=STRING)*)?
-//    code=Code
-//;
-
-    
-//Code:
-//    //{Code} '{=' (tokens+=Token)* '=}'
-//    {Code} '{=' body=Body '=}'
-//;
-
-//Reaction:
-//    (attributes+=Attribute)*
-//    (('reaction') | mutation ?= 'mutation')
-//    ('(' (triggers+=TriggerRef (',' triggers+=TriggerRef)*)? ')')?
-//    (sources+=VarRef (',' sources+=VarRef)*)?
-//    ('->' effects+=VarRefOrModeTransition (',' effects+=VarRefOrModeTransition)*)?
-//    code=Code
-//    (stp=STP)?
-//    (deadline=Deadline)?;
+Parallel:
+    {Parallel}
+    'parallel' (M=INT) '{'
+        nodes+=BehaviorTreeNode*
+    '}'
+;
 
 /////////// Statements
 

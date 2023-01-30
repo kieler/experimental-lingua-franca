@@ -48,6 +48,7 @@ import org.lflang.lf.LfFactory;
 import org.lflang.lf.Local;
 import org.lflang.lf.Model;
 import org.lflang.lf.Output;
+import org.lflang.lf.Parallel;
 import org.lflang.lf.Port;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
@@ -178,7 +179,7 @@ public class BehaviorTreeTransformation {
         reactor.getInstantiations().add(instance);
 
         // forward in and outputs of mock reactor to BT root node
-        connectInOutputs(reactor, nodeReactor, instance);
+        connectInOutputs(reactor, nodeReactor, instance); // TODO problem: leere parallel kriegt kein bt implicit interface (ist im scope provider)
         
         return reactor;
     }
@@ -232,7 +233,9 @@ public class BehaviorTreeTransformation {
             return transformTask((Task) node, newReactors, rootReactor);
         } else if (node instanceof Fallback) {
             return transformFallback((Fallback) node, newReactors, rootReactor);
-        } // TODO parralell
+        } else if (node instanceof Parallel) {
+            return transformParallel((Parallel) node, newReactors, rootReactor);
+        }
         return null;
     }
 
@@ -247,11 +250,7 @@ public class BehaviorTreeTransformation {
         setBTInterface(reactor);
         
         // reaction will output failure, if any child produces failure
-        var reactionFailure = LFF.createReaction();
-        var failureCode = LFF.createCode();
-        failureCode.setBody("SET(failure, true);");
-        reactionFailure.setCode(failureCode);
-        reactionFailure.getEffects().add(createRef(reactor, null, FAILURE));
+        var reactionFailure = createMergedOutputReaction(reactor, FAILURE);
 
         int i = 0;
         var last = new ReactorAndInst(reactor, null); // kann wieder lastR und lastIn sein
@@ -600,13 +599,7 @@ public class BehaviorTreeTransformation {
         setBTInterface(reactor);
 
         // reaction will output success, if any child produces success
-        Reaction reactionSuccess = LFF.createReaction();
-        Code successCode = LFF.createCode();
-        successCode.setBody("lf_set(success, true);");
-        reactionSuccess.setCode(successCode);
-
-        var successEffect = createRef(reactor, null, SUCCESS);
-        reactionSuccess.getEffects().add(successEffect);
+        Reaction reactionSuccess = createMergedOutputReaction(reactor, SUCCESS);
 
         int i = 0;
         var last = new ReactorAndInst(reactor, null);
@@ -757,7 +750,68 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
     
+    private Reactor transformParallel(Parallel par, List<Reactor> newReactors, Reactor rootReactor) {
+        var reactor = LFF.createReactor();
+        newReactors.add(reactor);
+        reactor.setName("Par" + nodeNameCounter++);
+        addBTNodeAnnotation(reactor, NodeType.PARALLEL.toString());
 
+        setBTInterface(reactor);
+        
+        var mergedOutputReaction = LFF.createReaction(); 
+        
+        for (var node : par.getNodes()) {
+            var nodeReactor = transformNode(node, newReactors, rootReactor);
+            
+         // instantiate child
+            var instance = LFF.createInstantiation();
+            instance.setReactorClass(nodeReactor);
+            instance.setName(nodeReactor.getName() + "_i");
+            reactor.getInstantiations().add(instance);
+            
+            mergedOutputReaction.getTriggers().add(createRef(nodeReactor, instance, SUCCESS));
+            mergedOutputReaction.getTriggers().add(createRef(nodeReactor, instance, FAILURE)); // NÖTIG: weil wenn alle returnen failure, dann wird reaction net ausgelöst
+                                                                                               // würde ja eig auch reichen, wenn nur ein child sich verbindet... TODO fragen
+            reactor.getConnections().add(createConn(reactor, null, START, nodeReactor, instance, START));
+        }
+        setMergedOutputReactionForPar(mergedOutputReaction, par.getM(), reactor);
+        
+        reactor.getReactions().add(mergedOutputReaction);
+        return reactor;
+    }
+    
+    private void setMergedOutputReactionForPar(Reaction reaction, int M, Reactor reactor) {
+        var code = LFF.createCode();
+        String codeContent = "int successCounter = 0;\n";
+        for (var succTrigger : reaction.getTriggers()) {
+            var triggerVarRef = (VarRef) succTrigger;
+            if (triggerVarRef.getVariable().getName().equals(SUCCESS)) {
+                String instName = triggerVarRef.getContainer().getName();
+                codeContent += "if(" + instName + ".success->is_present) {\n    "
+                        + "successCounter++;\n}\n";
+            }
+            
+        }
+        codeContent += "if(successCounter >= " + M + ") {\n    "
+                + "SET(success, true);\n} else {\n    "
+                + "SET(failure, true);\n}";
+        
+        code.setBody(codeContent);
+        reaction.setCode(code);
+        reaction.getEffects().add(createRef(reactor, null, SUCCESS));
+        reaction.getEffects().add(createRef(reactor, null, FAILURE));
+    }
+    
+    private Reaction createMergedOutputReaction(Reactor reactor, String outputName) {
+        var reaction = LFF.createReaction();
+        var code = LFF.createCode();
+        code.setBody("SET(" + outputName + ", true);");
+        reaction.setCode(code);
+        reaction.getEffects().add(createRef(reactor, null, outputName));
+        
+        return reaction;
+    }
+    
     private Reactor transformTask(Task task, List<Reactor> newReactors, Reactor rootReactor) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
@@ -795,18 +849,20 @@ public class BehaviorTreeTransformation {
             }
         }
         
+        // TODO ineffizient, gib Task eine Liste mit allen LOCALS!
         // set local outputs
         if (!(task.eContainer() instanceof BehaviorTree)) { // nötig weil nur dann gehen wir hier durch
             var allLocals = new ArrayList<Local>();
-            var seqOrFb = task.eContainer();
-            while (!(seqOrFb instanceof BehaviorTree)) {
-                if (seqOrFb instanceof Sequence) {
-                    allLocals.addAll(((Sequence) seqOrFb).getLocals());
-                    seqOrFb = seqOrFb.eContainer();
+            var seqOrFbOrPar = task.eContainer();
+            while (!(seqOrFbOrPar instanceof BehaviorTree)) {
+                if (seqOrFbOrPar instanceof Sequence) {
+                    allLocals.addAll(((Sequence) seqOrFbOrPar).getLocals());
+                } else if (seqOrFbOrPar instanceof Fallback) {
+                    allLocals.addAll(((Fallback) seqOrFbOrPar).getLocals());
                 } else {
-                    allLocals.addAll(((Fallback) seqOrFb).getLocals());
-                    seqOrFb = seqOrFb.eContainer();
+                    // TODO WAS TUN FÜR PARs??
                 }
+                seqOrFbOrPar = seqOrFbOrPar.eContainer();
             }
             for (VarRef varref : task.getTaskEffects()) {
                 if (varref.getVariable() instanceof Local) {
@@ -831,16 +887,16 @@ public class BehaviorTreeTransformation {
         // set local inputs
         if (!(task.eContainer() instanceof BehaviorTree)) { // danach checken for (taskSources if(local) proceed
             var allLocals = new ArrayList<Local>();
-            var seqOrFb = task.eContainer();
-            while (!(seqOrFb instanceof BehaviorTree)) {
-                if (seqOrFb instanceof Sequence) {
-                    allLocals.addAll(((Sequence) seqOrFb).getLocals());
-                    seqOrFb = seqOrFb.eContainer();
+            var seqOrFbOrPar = task.eContainer();
+            while (!(seqOrFbOrPar instanceof BehaviorTree)) {
+                if (seqOrFbOrPar instanceof Sequence) {
+                    allLocals.addAll(((Sequence) seqOrFbOrPar).getLocals());
+                } else if (seqOrFbOrPar instanceof Fallback){
+                    allLocals.addAll(((Fallback) seqOrFbOrPar).getLocals());
                 } else {
-                    allLocals.addAll(((Fallback) seqOrFb).getLocals());
-                    seqOrFb = seqOrFb.eContainer();
-
-                }                
+                    // WAS TUN FÜR PARs
+                }
+                seqOrFbOrPar = seqOrFbOrPar.eContainer();
             }
             
             for (VarRef varref : task.getTaskSources()) {

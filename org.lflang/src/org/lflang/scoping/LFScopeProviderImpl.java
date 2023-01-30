@@ -309,7 +309,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                             if (seqOrFb instanceof Sequence) {
                                 candidates.addAll(((Sequence) seqOrFb).getLocals());
                                 seqOrFb = seqOrFb.eContainer();
-                            } else {
+                            } else { // TODO change for PAR?
                                 candidates.addAll(((Fallback) seqOrFb).getLocals());
                                 seqOrFb = seqOrFb.eContainer();
                             }
