@@ -170,6 +170,9 @@ public class BehaviorTreeTransformation {
         // Init set all inputs and outputs from declared bt. 
         copyInOutputs(reactor, bt.getInputs(), bt.getOutputs());
         
+        
+        resolveLocalDependencies(bt);
+        
         // Transform BT root
         var deleteThis = bt.getRootNode(); // makes debugging easier (temporary)
         var nodeReactor = transformNode(deleteThis, newReactors, reactor);
@@ -224,6 +227,66 @@ public class BehaviorTreeTransformation {
             }
         }
 
+    }
+    
+    private void resolveLocalDependencies(BehaviorTree bt) {
+        if (bt.getRootNode() instanceof Parallel) return; // TODO was tun hier fragen
+        if (bt.getRootNode() instanceof Task) return;
+        
+        var dependencies = new HashMap<String, List<String>>();
+        getPotentialLocalInputs(bt.getRootNode(), "0", dependencies);
+        
+        int a = 0;
+        int b = 0;
+    }
+    
+    private void getPotentialLocalInputs(BehaviorTreeNode seqOrFb, String path, HashMap<String, List<String>> result) {
+        Sequence seq = null;
+        Fallback fb = null;
+        if (seqOrFb instanceof Sequence) seq = (Sequence) seqOrFb;
+        if (seqOrFb instanceof Fallback) fb = (Fallback) seqOrFb;
+        
+        int i = 0;
+        if (seq != null) {
+            for (var node : seq.getNodes()) {
+                if (node instanceof Task) {
+                    for (var varref : ((Task) node).getTaskSources()) {
+                        if (varref.getVariable() instanceof Local) {
+                            String inputName = varref.getVariable().getName();
+                            var pathList = result.get(inputName);
+                            if (pathList == null) {
+                                pathList = new ArrayList<String>();
+                            }
+                            pathList.add(path + i);
+                            result.put(inputName, pathList);
+                        }
+                    }
+                } else if (node instanceof Sequence || node instanceof Fallback) {
+                    getPotentialLocalInputs(node, path + i, result);
+                }
+                i++;
+            }
+        } else if (fb != null) {
+            for (var node : fb.getNodes()) {
+                if (node instanceof Task) {
+                    for (var varref : ((Task) node).getTaskSources()) {
+                        if (varref.getVariable() instanceof Local) {
+                            String inputName = varref.getVariable().getName();
+                            var pathList = result.get(inputName);
+                            if (pathList == null) {
+                                pathList = new ArrayList<String>();
+                            }
+                            pathList.add(path + i);
+                            result.put(inputName, pathList);
+                        }
+                    }
+                } else if (node instanceof Sequence || node instanceof Fallback) {
+                    getPotentialLocalInputs(node, path + i, result);
+                }
+                i++;
+            }
+        }
+            
     }
 
     private Reactor transformNode(BehaviorTreeNode node, List<Reactor> newReactors, Reactor rootReactor) {
