@@ -121,7 +121,7 @@ TargetDecl:
 BehaviorTree:
     {BehaviorTree}
     (attributes+=Attribute)*
-    'btree' (name=ID)?
+    'btree' (name=ID)? // TODO behaviortree statt btree
     '{'
     ((inputs+=Input) | (outputs+=Output))*  // locals hinzufügen
     rootNode=BehaviorTreeNode?
@@ -135,7 +135,7 @@ BehaviorTreeNode:
 Task:
     {Task}
 //    (attributes+=Attribute)*
-    ('task'|'action'|condition?='condition')
+    ('task'|condition?='condition')
         (taskName=STRING)?
         (taskSources+=VarRef (',' taskSources+=VarRef)*)?
         ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
