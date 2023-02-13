@@ -49,6 +49,7 @@ import org.lflang.lf.ImportedReactor;
 import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.Model;
+import org.lflang.lf.Parallel;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.ReactorDecl;
@@ -192,7 +193,8 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             } else if (variable.eContainer().eContainer() instanceof Mode) {
                 mode = (Mode) variable.eContainer().eContainer();
                 reactor = (Reactor) variable.eContainer().eContainer().eContainer();
-            } else if (variable.eContainer() instanceof Task || variable.eContainer() instanceof Sequence) {
+            } else if (variable.eContainer() instanceof Task || variable.eContainer() instanceof Sequence ||
+                    variable.eContainer() instanceof Fallback || variable.eContainer() instanceof Parallel) {
                 var parent = variable.eContainer();
                 while (behtree == null) {
                     if (parent.eContainer() instanceof BehaviorTree) {
@@ -298,7 +300,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                 default:
                     return Scopes.scopeFor(emptyList());
                 }
-            } else if (behtree !=null) {
+            } else if (behtree != null) {
                 switch (type) {
                     case SOURCE: {//TODO mb ineffizient?
 //                        return super.getScope(variable, reference);
@@ -308,11 +310,13 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                         while (!(seqOrFb instanceof BehaviorTree)) {
                             if (seqOrFb instanceof Sequence) {
                                 candidates.addAll(((Sequence) seqOrFb).getLocals());
-                                seqOrFb = seqOrFb.eContainer();
-                            } else { // TODO change for PAR?
+                            } else if (seqOrFb instanceof Fallback){ // TODO change for PAR?
                                 candidates.addAll(((Fallback) seqOrFb).getLocals());
-                                seqOrFb = seqOrFb.eContainer();
+                            } else {
+                                candidates.addAll(((Parallel) seqOrFb).getLocals());
+
                             }
+                            seqOrFb = seqOrFb.eContainer();
                         }
                         
                         candidates.addAll(behtree.getInputs());
@@ -326,12 +330,13 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                         while (!(seqOrFb instanceof BehaviorTree)) {
                             if (seqOrFb instanceof Sequence) {
                                 candidates.addAll(((Sequence) seqOrFb).getLocals());
-                                seqOrFb = seqOrFb.eContainer();
-                            } else {
+                            } else if (seqOrFb instanceof Fallback){
                                 candidates.addAll(((Fallback) seqOrFb).getLocals());
-                                seqOrFb = seqOrFb.eContainer();
+                            } else {
+                                candidates.addAll(((Parallel) seqOrFb).getLocals());
                             }
                             
+                            seqOrFb = seqOrFb.eContainer();
                         }
                         candidates.addAll(behtree.getOutputs());
 //                        candidates.addAll(allActions(reactor));

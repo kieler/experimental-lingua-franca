@@ -167,7 +167,8 @@ Fallback:
 
 Parallel:
     {Parallel}
-    'parallel' (M=INT) '{'
+    'parallel' (M=INT)? '{'
+        locals+=Local*
         nodes+=BehaviorTreeNode*
     '}'
 ;
