@@ -31,6 +31,7 @@ import static org.lflang.ASTUtils.*;
 import com.google.inject.Inject;
 
 import java.util.ArrayList;
+import java.util.Optional;
 
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EReference;
@@ -54,6 +55,8 @@ import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.ReactorDecl;
 import org.lflang.lf.Sequence;
+import org.lflang.lf.SubTree;
+import org.lflang.lf.SubTreeBinding;
 import org.lflang.lf.Task;
 import org.lflang.lf.VarRef;
 import org.lflang.lf.LfPackage;
@@ -110,6 +113,8 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             return getScopeForImportedReactor((ImportedReactor) context, reference);
         } else if (context instanceof BehaviorTree) { 
             return getScopeForReactorDecl(context, reference);
+        } else if (context instanceof SubTreeBinding) { 
+            return getScopeForSubTreeBinding((SubTreeBinding)context, reference);
         }
         return super.getScope(context, reference);
     }
@@ -381,5 +386,74 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             }
         }
         return RefType.NULL;
+    }
+    
+    protected IScope getScopeForSubTreeBinding(SubTreeBinding binding, EReference reference) {
+        var parent = binding.eContainer();
+        BehaviorTree btree = null;
+        while (btree == null) {
+            if (parent.eContainer() instanceof BehaviorTree) {
+                btree = (BehaviorTree) parent.eContainer();
+            } else {
+                parent = parent.eContainer();
+            }
+        }
+        var subTrees = new ArrayList<SubTree>();
+        var bTreeContents = btree.eAllContents();
+        while(bTreeContents.hasNext()) {
+            var obj = bTreeContents.next();
+            if (obj instanceof SubTree) {
+                subTrees.add((SubTree)obj);
+            }
+        }
+        if (reference == LfPackage.Literals.SUB_TREE_BINDING__SOURCE_CONTAINER 
+                || reference == LfPackage.Literals.SUB_TREE_BINDING__TARGET_CONTAINER ) {
+            return Scopes.scopeFor(subTrees);
+        } else if (reference == LfPackage.Literals.SUB_TREE_BINDING__SOURCE) {
+            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer());
+            if (instanceName != null) {
+                Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.equals(it.getName())).findFirst();
+                if (subTree.isPresent()) {
+                    return Scopes.scopeFor(subTree.get().getBehaviorTree().getOutputs());
+                }
+            }
+            var candidates = new ArrayList<EObject>();
+            var seqOrFb = binding.eContainer().eContainer();
+            while (!(seqOrFb instanceof BehaviorTree)) {
+                if (seqOrFb instanceof Sequence) {
+                    candidates.addAll(((Sequence) seqOrFb).getLocals());
+                } else if (seqOrFb instanceof Fallback){ // TODO change for PAR?
+                    candidates.addAll(((Fallback) seqOrFb).getLocals());
+                } else if (seqOrFb instanceof Parallel){
+                    candidates.addAll(((Parallel) seqOrFb).getLocals());
+                }
+                seqOrFb = seqOrFb.eContainer();
+            }
+            candidates.addAll(btree.getInputs());
+            return Scopes.scopeFor(candidates);
+        }else if (reference == LfPackage.Literals.SUB_TREE_BINDING__TARGET) {
+            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer());
+            if (instanceName != null) {
+                Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.equals(it.getName())).findFirst();
+                if (subTree.isPresent()) {
+                    return Scopes.scopeFor(subTree.get().getBehaviorTree().getInputs());
+                }
+            }
+            var candidates = new ArrayList<EObject>();
+            var seqOrFb = binding.eContainer().eContainer();
+            while (!(seqOrFb instanceof BehaviorTree)) {
+                if (seqOrFb instanceof Sequence) {
+                    candidates.addAll(((Sequence) seqOrFb).getLocals());
+                } else if (seqOrFb instanceof Fallback){ // TODO change for PAR?
+                    candidates.addAll(((Fallback) seqOrFb).getLocals());
+                } else if (seqOrFb instanceof Parallel){
+                    candidates.addAll(((Parallel) seqOrFb).getLocals());
+                }
+                seqOrFb = seqOrFb.eContainer();
+            }
+            candidates.addAll(btree.getInputs());
+            return Scopes.scopeFor(candidates);
+        }
+        return Scopes.scopeFor(emptyList());
     }
 }

@@ -286,6 +286,7 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
                 List<KNode> reactorNodes = new ArrayList<>();
                 for (Reactor reactor : model.getReactors()) {
                     if (reactor == main) continue;
+                    if (_btDiagrams.isGenerated(reactor)) continue;
                     ReactorInstance reactorInstance = new ReactorInstance(reactor, new SynthesisErrorReporter(), new HashSet<>());
                     reactorNodes.addAll(createReactorNode(reactorInstance, main == null, 
                             HashBasedTable.<ReactorInstance, PortInstance, KPort>create(), 

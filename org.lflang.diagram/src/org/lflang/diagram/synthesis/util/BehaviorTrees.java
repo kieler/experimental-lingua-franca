@@ -95,7 +95,9 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
                     var r = visit.pop();
                     var t = getBTNodeType(r);
                     if (t != null) {
-                        btNodes.put(r, createBTNode(r, t));
+                        if (t != NodeType.ROOT) {
+                            btNodes.put(r, createBTNode(r, t));
+                        }
                         visit.addAll(r.children);
                     }
                 }
@@ -105,6 +107,9 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
                     var parent = entry.getValue();
                     for (var childReactor : entry.getKey().children) {
                         var child = btNodes.get(childReactor);
+                        if (child == null && getBTNodeType(childReactor) == NodeType.ROOT && !childReactor.children.isEmpty()) {
+                            child = btNodes.get(childReactor.children.get(0));
+                        }
                         if (child != null) {
                             KEdge edge = _kEdgeExtensions.createEdge();
                             edge.setSource(parent);
@@ -201,5 +206,13 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
         var ktext = _kContainerRenderingExtensions.addText(figure, text);
         _kRenderingExtensions.setFontSize(ktext, 8);
         _kRenderingExtensions.setSurroundingSpace(ktext, 5, 0);
+    }
+
+    /**
+     * @param reactor
+     * @return
+     */
+    public boolean isGenerated(Reactor reactor) {
+        return getBTNodeType(reactor) != null && getBTNodeType(reactor) != NodeType.ROOT;
     }
 }

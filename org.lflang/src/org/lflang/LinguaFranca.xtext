@@ -129,17 +129,35 @@ BehaviorTree:
 ;
 
 BehaviorTreeNode:
-    Task | Sequence | Fallback | Parallel
+    Task | Sequence | Fallback | Parallel | SubTree
 ;
 
 Task:
     {Task}
 //    (attributes+=Attribute)*
     ('task'|condition?='condition')
-        (taskName=STRING)?
+    (taskName=STRING)?
+    (
         (taskSources+=VarRef (',' taskSources+=VarRef)*)?
         ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
-    code=Code
+        code=Code
+    |
+        '{'
+            ( (preambles+=Preamble)
+            | (stateVars+=StateVar)
+            | (methods+=Method)
+            | (timers+=Timer)
+            | (actions+=Action)
+            | (instantiations+=Instantiation)
+            | (connections+=Connection)
+//            | (reactions+=Reaction) // triggering unclear
+            )*
+            'reaction'
+            (taskSources+=VarRef (',' taskSources+=VarRef)*)?
+            ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
+            code=Code
+        '}'
+    )
 ;
 
 //    (attributes+=Attribute)* mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
@@ -171,6 +189,25 @@ Parallel:
         locals+=Local*
         nodes+=BehaviorTreeNode*
     '}'
+;
+
+SubTree:
+    'subtree' name=ID '=' 'new' // (widthSpec=WidthSpec)?
+    behaviorTree=[BehaviorTree] ('<' typeParms+=TypeParm (',' typeParms+=TypeParm)* '>')? 
+    '(' 
+    (parameters+=Assignment (',' parameters+=Assignment)*)? 
+    ')'
+    (
+        '{'
+            bindings+=SubTreeBinding*
+        '}'
+        |
+        ';'?
+    )
+;
+
+SubTreeBinding:
+    (sourceContainer=[SubTree] '.')? source=[Variable] '->' (targetContainer=[SubTree] '.')? target=[Variable]
 ;
 
 /////////// Statements

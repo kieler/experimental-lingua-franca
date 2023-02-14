@@ -56,6 +56,7 @@ import org.lflang.lf.Port;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
+import org.lflang.lf.SubTree;
 import org.lflang.lf.Task;
 import org.lflang.lf.Type;
 import org.lflang.lf.VarRef;
@@ -125,6 +126,7 @@ public class BehaviorTreeTransformation {
     }
 
     private int nodeNameCounter = 0;
+    private HashMap<BehaviorTree, Reactor> bTreeCache = new HashMap<>();
 
     private void transformAll(Model lfModel) {
         var newReactors = new ArrayList<Reactor>();
@@ -165,14 +167,21 @@ public class BehaviorTreeTransformation {
     }
     
     private Reactor transformBTree(BehaviorTree bt, List<Reactor> newReactors) {
-
+        if (bTreeCache.containsKey(bt)) {
+            return bTreeCache.get(bt);
+        }
+        
+        addImplictInterface(bt);
+        
         var reactor = LFF.createReactor();
+        bTreeCache.put(bt, reactor);
         newReactors.add(reactor);
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
         // Init set all inputs and outputs from declared bt. 
         copyInOutputs(reactor, bt.getOutputs(), bt.getInputs());
+
         
         
         var localOutputDependencies = new HashMap<Local, List<String>>();   // TODO change to List<Integer>
@@ -181,15 +190,16 @@ public class BehaviorTreeTransformation {
         var deleteThis2 = new HashMap<BehaviorTreeNode, NodesLocalOutInputs>();
         var nodesToLocalOutInputs = computeNodesLocalOutInputs(bt.getRootNode(), localOutputDependencies, localInputDependencies, deleteThis2);
         // Transform BT root
-        var nodeReactor = transformNode(bt.getRootNode(), newReactors, nodesToLocalOutInputs);
-        var instance = LFF.createInstantiation();
-        instance.setReactorClass(nodeReactor);
-        instance.setName("root");
-        reactor.getInstantiations().add(instance);
-
-        // forward in and outputs of mock reactor to BT root node
-        connectInOutputs(reactor, nodeReactor, instance); // TODO problem: leere parallel kriegt kein bt implicit interface (ist im scope provider)
-        
+        if (bt.getRootNode() != null) {
+            var nodeReactor = transformNode(bt.getRootNode(), newReactors, nodesToLocalOutInputs);
+            var instance = LFF.createInstantiation();
+            instance.setReactorClass(nodeReactor);
+            instance.setName("root");
+            reactor.getInstantiations().add(instance);
+    
+            // forward in and outputs of mock reactor to BT root node
+            connectInOutputs(reactor, nodeReactor, instance); // TODO problem: leere parallel kriegt kein bt implicit interface (ist im scope provider)
+        }
 //        var outputRunning = LFF.createOutput();
 //        outputRunning.setName("running");
 //        var type = LFF.createType();
@@ -587,6 +597,8 @@ public class BehaviorTreeTransformation {
             return transformFallback((Fallback) node, newReactors, nodeToLocalOutInputs);
         } else if (node instanceof Parallel) {
             return transformParallel((Parallel) node, newReactors, nodeToLocalOutInputs);
+        } else if (node instanceof SubTree) {
+            return transformSubTree((SubTree) node, newReactors, nodeToLocalOutInputs);
         }
         return null;
     }
@@ -647,7 +659,11 @@ public class BehaviorTreeTransformation {
             // instantiate child
             var instance = LFF.createInstantiation();
             instance.setReactorClass(nodeReactor);
-            instance.setName(nodeReactor.getName() + "_i");
+            if (node instanceof SubTree) {
+                instance.setName(((SubTree)node).getName());
+            } else {
+                instance.setName(nodeReactor.getName() + "_i");
+            }
             reactor.getInstantiations().add(instance);
             
             // add all inputs of childs to own inputs TODO if they are not locals   // hier filter hinzufügen und man spart sich start schleifendurchgang
@@ -656,8 +672,9 @@ public class BehaviorTreeTransformation {
             for (Input nodeInput : nodeReactor.getInputs()) {
                 var inputName = nodeInput.getName();
                 if (!inputName.equals(START)) {
-                    
-                    if (reactorInputNames.contains(inputName)) {
+                    if (node instanceof SubTree) {
+                        
+                    } else if (reactorInputNames.contains(inputName)) {
                         var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
                         reactor.getConnections().add(inputConn);
                     } else if (nodeInput.getLocal() == null) {
@@ -699,7 +716,9 @@ public class BehaviorTreeTransformation {
             for (Output nodeOutput : nodeReactor.getOutputs()) {
                 var outputName = nodeOutput.getName();
                 if (!outputName.equals(SUCCESS) && !outputName.equals(FAILURE)) {
-                    if (reactorOutputNames.contains(outputName)) {
+                    if (node instanceof SubTree) {
+                        
+                    } else if (reactorOutputNames.contains(outputName)) {
                         var triggers = sequentialOutputs.get(outputName);
                         if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
                         triggers.add(createRef(nodeReactor, instance, outputName));
@@ -1224,6 +1243,13 @@ public class BehaviorTreeTransformation {
             }
         }
         
+        // copy state vars
+        if (task.getStateVars() != null) {
+            for (var sv : task.getStateVars()) {
+                reactor.getStateVars().add(EcoreUtil.copy(sv));
+            }
+        }
+        
         var reaction = LFF.createReaction();
         if (task.getCode() != null) {
 //            reaction.setCode(task.getCode()); makes code go null
@@ -1248,6 +1274,11 @@ public class BehaviorTreeTransformation {
         return reactor;
     }
 
+    private Reactor transformSubTree(SubTree subtree, List<Reactor> newReactors, HashMap<BehaviorTreeNode, NodesLocalOutInputs> nodeToLocalOutInputs) {
+        var btree = subtree.getBehaviorTree();
+        return transformBTree(btree, newReactors);
+    }
+    
     private Connection createConn(Reactor leftR, Instantiation leftI,
             String leftPortName, Reactor rightR, Instantiation rightI,
             String rightPortName) {
