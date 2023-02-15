@@ -122,6 +122,7 @@ BehaviorTree:
     {BehaviorTree}
     (attributes+=Attribute)*
     'btree' (name=ID)? // TODO behaviortree statt btree
+    ('(' parameters+=Parameter (',' parameters+=Parameter)* ')')?
     '{'
     ((inputs+=Input) | (outputs+=Output))*  // locals hinzufügen
     rootNode=BehaviorTreeNode?

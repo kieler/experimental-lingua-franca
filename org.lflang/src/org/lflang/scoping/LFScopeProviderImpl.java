@@ -410,7 +410,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                 || reference == LfPackage.Literals.SUB_TREE_BINDING__TARGET_CONTAINER ) {
             return Scopes.scopeFor(subTrees);
         } else if (reference == LfPackage.Literals.SUB_TREE_BINDING__SOURCE) {
-            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer());
+            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer()).toString();
             if (instanceName != null) {
                 Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.equals(it.getName())).findFirst();
                 if (subTree.isPresent()) {
@@ -432,7 +432,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             candidates.addAll(btree.getInputs());
             return Scopes.scopeFor(candidates);
         }else if (reference == LfPackage.Literals.SUB_TREE_BINDING__TARGET) {
-            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer());
+            var instanceName = nameProvider.getFullyQualifiedName(binding.getTargetContainer()).toString();
             if (instanceName != null) {
                 Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.equals(it.getName())).findFirst();
                 if (subTree.isPresent()) {

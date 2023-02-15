@@ -97,8 +97,10 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
                     if (t != null) {
                         if (t != NodeType.ROOT) {
                             btNodes.put(r, createBTNode(r, t));
+                            visit.addAll(r.children);
+                        } else {
+                            visit.addAll(0, r.children);
                         }
-                        visit.addAll(r.children);
                     }
                 }
                 

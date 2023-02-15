@@ -180,9 +180,7 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
         // Init set all inputs and outputs from declared bt. 
-        copyInOutputs(reactor, bt.getOutputs(), bt.getInputs());
-
-        
+        copyInOutputs(reactor, bt.getOutputs(), bt.getInputs());        
         
         var localOutputDependencies = new HashMap<Local, List<String>>();   // TODO change to List<Integer>
         var localInputDependencies = new HashMap<Local, List<String>>();
@@ -872,8 +870,10 @@ public class BehaviorTreeTransformation {
         for (var varref : varrefList) {
             String instanceName = varref.getContainer().getName();
             Type type = null;
-            if (varref.getVariable() instanceof Output) { type = ((Output) varref.getVariable()).getType(); }
-            String setFunc = (type.getArraySpec() == null) ? "SET(" : "lf_set_array(";  // TODO es gibt bestimmt mehr als nur arrays
+            if (varref.getVariable() instanceof Output) { 
+                type = ((Output) varref.getVariable()).getType();
+                }
+            String setFunc = (type != null && type.getArraySpec() == null) ? "SET(" : "lf_set_array(";  // TODO es gibt bestimmt mehr als nur arrays
             String settersCode = setFunc + outputName + ", " + instanceName + "." + outputName + "->value);";
             
             result += ifOrElseIf + instanceName + "." + outputName + "->is_present){\n    " + settersCode + "\n}";
@@ -1207,10 +1207,10 @@ public class BehaviorTreeTransformation {
               reactor.getInputs().add(copyInput);
           }
         }
-        for (VarRef varref : task.getTaskSources()) {
-            if (varref.getVariable() instanceof Input) {
-                var copyInput = EcoreUtil.copy(((Input) varref.getVariable()));
-                reactor.getInputs().add(copyInput);
+        for (VarRef varref : task.getTaskEffects()) {
+            if (varref.getVariable() instanceof Output) {
+                var copyOutput = EcoreUtil.copy(((Output) varref.getVariable()));
+                reactor.getOutputs().add(copyOutput);
             }
         }
         var tasksLocalInOutputs = nodeToLocalOutInputs.remove(task);
