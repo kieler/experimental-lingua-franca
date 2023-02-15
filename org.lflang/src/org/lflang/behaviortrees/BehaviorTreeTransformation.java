@@ -657,10 +657,7 @@ public class BehaviorTreeTransformation {
                 var inputName = nodeInput.getName();
                 if (!inputName.equals(START)) {
                     
-                    if (reactorInputNames.contains(inputName)) {
-                        var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
-                        reactor.getConnections().add(inputConn);
-                    } else if (nodeInput.getLocal() == null) {
+                    if (nodeInput.getLocal() == null) {
                         if (!reactorInputNames.contains(inputName)) {
                             var copyInput = EcoreUtil.copy(nodeInput);
                             reactor.getInputs().add(copyInput);
@@ -675,14 +672,13 @@ public class BehaviorTreeTransformation {
                             triggsAndEffcs = localSenders.get(keyName);
                         }
                         
-                        if (triggsAndEffcs == null) {
-                            // What to do here when Task versucht ein Local zu lesen welche noch nie gesendet
-                            // DAS HEIßt Local von außen holen!!! DONE
+                        if (triggsAndEffcs == null) { // DH ES ist ein local und keine task innerhalb der sequence gerad hat auf den geschrieben
+                            if (reactorInputNames.contains(inputName)) {
+                                var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
+                                reactor.getConnections().add(inputConn);
+                            }
                             
-                            // EIG WÜRDE ES HIER NIEMALS DAZU KOMMMEN, WEIL WIR OBEN da stehen
-                            // Haben dass dann conn gemacht werden muss, und deshlab kommen wir 
-                            // hier nie rein weil else if ist.
-                           } else {
+                        } else {
                                String localNameWriteLock = keyName;
                                if (keyName.charAt(0) != '#') {
                                    localSenders.remove(keyName);
@@ -699,12 +695,8 @@ public class BehaviorTreeTransformation {
             for (Output nodeOutput : nodeReactor.getOutputs()) {
                 var outputName = nodeOutput.getName();
                 if (!outputName.equals(SUCCESS) && !outputName.equals(FAILURE)) {
-                    if (reactorOutputNames.contains(outputName)) {
-                        var triggers = sequentialOutputs.get(outputName);
-                        if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
-                        triggers.add(createRef(nodeReactor, instance, outputName));
-                        sequentialOutputs.put(outputName, triggers);
-                    } else if (nodeOutput.getLocal() == null) {
+                    
+                    if (nodeOutput.getLocal() == null) {
                         if (!reactorOutputNames.contains(outputName)) {
                             var copyOutput = EcoreUtil.copy(nodeOutput);
                             reactor.getOutputs().add(copyOutput);
@@ -714,14 +706,29 @@ public class BehaviorTreeTransformation {
                         triggers.add(createRef(nodeReactor, instance, outputName));
                         sequentialOutputs.put(outputName, triggers);
                     } else {
+                        if (reactorOutputNames.contains(outputName)) {
+                            var triggers = sequentialOutputs.get(outputName);
+                            if (triggers == null) { triggers = new ArrayList<VarRef>(); } // SOLLTE EIG dann net null sein
+                            triggers.add(createRef(nodeReactor, instance, outputName));
+                            sequentialOutputs.put(outputName, triggers);
+                        } 
+                        
+                        // was wenn # vorne? finden wir den dann überhaupt hier? JA, weil contains checkt substring
                         var keyName = localSenders.keySet().stream().filter(x -> x.contains(outputName)).findFirst().orElse(null);
                         TriggerAndEffectRefs triggsAndEffcs = null;
                         if (keyName != null) {
                             triggsAndEffcs = localSenders.get(keyName);
                         }
                         
-                        if (triggsAndEffcs == null) {
+                        if (triggsAndEffcs == null) { // TODO: validate: Hier kommt man nur rein, wenn zum ersten mal mit dem comp
+                                                      // gearbeitet wird, weil ab dann wird dieser immer ersetzt werden
+                                                      // also werden wir für local nie mehr null haben
+                                                      // update: WIR WOLLEN DOCH, dass das dann trotzdem rangefügt wird!
+                                                      // es werden bei #lock alle trigger rüberkopiert
                             triggsAndEffcs = new TriggerAndEffectRefs();
+                            if (reactorInputNames.contains(outputName)) {
+                                triggsAndEffcs.triggerRefs.add(createRef(reactor, null, outputName));
+                            }
                         } else if (keyName.charAt(0) == '#'){
                             localReactions.add(triggsAndEffcs);
                             triggsAndEffcs = new TriggerAndEffectRefs();
@@ -826,8 +833,8 @@ public class BehaviorTreeTransformation {
         String outputName = triggsAndEffcs.triggerRefs.get(0).getVariable().getName();
         String ifOrElseIf = "if(";
         for (var trigger : triggsAndEffcs.triggerRefs) {
-            String instNameTrigger = trigger.getContainer().getName();
-            result += ifOrElseIf +  instNameTrigger + "." + outputName + "->is_present) {//local\n    ";
+            String instNameTrigger = (trigger.getContainer() == null)? "" : trigger.getContainer().getName() + ".";
+            result += ifOrElseIf +  instNameTrigger + outputName + "->is_present) {//local\n    ";
             for (var effect : triggsAndEffcs.effectRefs) {
                 String instNameEffect = effect.getContainer().getName();
                 Type type = null;
@@ -837,7 +844,7 @@ public class BehaviorTreeTransformation {
                     type = ((Input) effect.getVariable()).getType();
                 }
                 String setFunc = (type.getArraySpec() == null) ? "SET(" : "lf_set_array(";  // TODO es gibt bestimmt mehr als nur arrays // TODO und auch für arrays noch net fertig
-                result += setFunc + instNameEffect + "." + outputName + ", " + instNameTrigger + "." + outputName + "->value);\n    ";
+                result += setFunc + instNameEffect + "." + outputName + ", " + instNameTrigger + outputName + "->value);\n    ";
             }
             result = result.substring(0, result.length()-4) + "}\n";  // DELETE INDENTATION FOR outputSetter
             ifOrElseIf = " else if(";
