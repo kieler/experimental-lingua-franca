@@ -1195,10 +1195,10 @@ public class BehaviorTreeTransformation {
               reactor.getInputs().add(copyInput);
           }
         }
-        for (VarRef varref : task.getTaskSources()) {
-            if (varref.getVariable() instanceof Input) {
-                var copyInput = EcoreUtil.copy(((Input) varref.getVariable()));
-                reactor.getInputs().add(copyInput);
+        for (VarRef varref : task.getTaskEffects()) {
+            if (varref.getVariable() instanceof Output) {
+                var copyOutput = EcoreUtil.copy(((Output) varref.getVariable()));
+                reactor.getOutputs().add(copyOutput);
             }
         }
         var tasksLocalInOutputs = nodeToLocalOutInputs.remove(task);
