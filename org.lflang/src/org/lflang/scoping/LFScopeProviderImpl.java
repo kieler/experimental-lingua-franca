@@ -410,9 +410,9 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                 || reference == LfPackage.Literals.SUB_TREE_BINDING__TARGET_CONTAINER ) {
             return Scopes.scopeFor(subTrees);
         } else if (reference == LfPackage.Literals.SUB_TREE_BINDING__SOURCE) {
-            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer()).toString();
+            var instanceName = nameProvider.getFullyQualifiedName(binding.getSourceContainer());
             if (instanceName != null) {
-                Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.equals(it.getName())).findFirst();
+                Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.toString().equals(it.getName())).findFirst();
                 if (subTree.isPresent()) {
                     return Scopes.scopeFor(subTree.get().getBehaviorTree().getOutputs());
                 }
@@ -432,9 +432,9 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             candidates.addAll(btree.getInputs());
             return Scopes.scopeFor(candidates);
         }else if (reference == LfPackage.Literals.SUB_TREE_BINDING__TARGET) {
-            var instanceName = nameProvider.getFullyQualifiedName(binding.getTargetContainer()).toString();
+            var instanceName = nameProvider.getFullyQualifiedName(binding.getTargetContainer());
             if (instanceName != null) {
-                Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.equals(it.getName())).findFirst();
+                Optional<SubTree> subTree = subTrees.stream().filter(it -> instanceName.toString().equals(it.getName())).findFirst();
                 if (subTree.isPresent()) {
                     return Scopes.scopeFor(subTree.get().getBehaviorTree().getInputs());
                 }
