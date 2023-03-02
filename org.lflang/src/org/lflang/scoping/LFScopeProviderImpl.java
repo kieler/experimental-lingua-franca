@@ -451,7 +451,7 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
                 }
                 seqOrFb = seqOrFb.eContainer();
             }
-            candidates.addAll(btree.getInputs());
+            candidates.addAll(btree.getOutputs());
             return Scopes.scopeFor(candidates);
         }
         return Scopes.scopeFor(emptyList());
