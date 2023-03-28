@@ -190,6 +190,8 @@ public class BehaviorTreeTransformation {
         // forward in and outputs of mock reactor to BT root node
         connectInOutputs(reactor, nodeReactor, instance); // TODO problem: leere parallel kriegt kein bt implicit interface (ist im scope provider)
         
+        // nutze Start input as trigger
+        
 //        var outputRunning = LFF.createOutput();
 //        outputRunning.setName("running");
 //        var type = LFF.createType();
@@ -214,14 +216,18 @@ public class BehaviorTreeTransformation {
     }
     
     private void copyInOutputs (Reactor reactor, List<Output> outputs, List<Input> inputs) {
-        for (Input input : inputs) {
-            var copyInput = EcoreUtil.copy(input);
-            reactor.getInputs().add(copyInput);
+        if (inputs != null) {
+            for (Input input : inputs) {
+                var copyInput = EcoreUtil.copy(input);
+                reactor.getInputs().add(copyInput);
+            }            
         }
         
-        for (Output output : outputs) {
-            var copyOutput = EcoreUtil.copy(output);
-            reactor.getOutputs().add(copyOutput);
+        if (outputs != null) {
+            for (Output output : outputs) {
+                var copyOutput = EcoreUtil.copy(output);
+                reactor.getOutputs().add(copyOutput);
+            }            
         }
     }
     
@@ -358,18 +364,31 @@ public class BehaviorTreeTransformation {
     }
 
     private HashMap<BehaviorTreeNode, NodesLocalOutInputs> computeNodesLocalOutInputs(BehaviorTreeNode root, HashMap<Local, List<String>> outDep, HashMap<Local, List<String>> inDep, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
-        for (var output : outDep.entrySet()) {
-            var local = output.getKey();
-            var inputs = inDep.get(local);
-            var lastReceiver = inputs.get(inputs.size() - 1);
-            recursiveOutputComputation(root, local, output.getValue() ,lastReceiver, result);
-        }
-        for (var input : inDep.entrySet()) {
-            var local = input.getKey();
+        HashSet<Local> set = new HashSet<Local>(outDep.keySet());
+        set.addAll(inDep.keySet());
+        for (var local : set) {
             var outputs = outDep.get(local);
-            var firstSender = outputs.get(0);
-            recursiveInputComputation(root, local, input.getValue(), firstSender, result);
+            var inputs = inDep.get(local);
+            if (inputs != null && outputs != null) {
+                var lastReceiver = inputs.get(inputs.size() - 1);
+                var firstSender = outputs.get(0);
+                
+                recursiveOutputComputation(root, local, outDep.get(local) ,lastReceiver, result);
+                recursiveInputComputation(root, local, inDep.get(local), firstSender, result);                
+            }
         }
+//        for (var output : outDep.entrySet()) {  // Wäre etwas übersichtlicher wenn ein local zurzeit durchgegangen wird
+//            var local = output.getKey();
+//            var inputs = inDep.get(local);
+//            var lastReceiver = inputs.get(inputs.size() - 1);
+//            recursiveOutputComputation(root, local, output.getValue() ,lastReceiver, result);
+//        }
+//        for (var input : inDep.entrySet()) {
+//            var local = input.getKey();
+//            var outputs = outDep.get(local);
+//            var firstSender = outputs.get(0);
+//            recursiveInputComputation(root, local, input.getValue(), firstSender, result);
+//        }
         
         return result;
     }
@@ -672,8 +691,8 @@ public class BehaviorTreeTransformation {
                             triggsAndEffcs = localSenders.get(keyName);
                         }
                         
-                        if (triggsAndEffcs == null) { // DH ES ist ein local und keine task innerhalb der sequence gerad hat auf den geschrieben
-                            if (reactorInputNames.contains(inputName)) {
+                        if (triggsAndEffcs == null) { // DH ES ist ein local und keine task innerhalb der sequence gerad hat auf den geschrieben -> ERGO EINFACH DIREKT VERBINDEN
+                            if (reactorInputNames.contains(inputName)) { // DANN MÜSSEN WIR UNS VON DRAUSSEN HOLEN, ABER EIG SOLL DIESE CONN JA AUCH TROTZDEM GEMACHT WERDEN, WEIL WAS WENN DER TASK, DER IN DER SEQUENCE SCHREIBEN KANN ABER NICHT TUT, DANN HABEN WIR KEIN VAL! UPDATE: GEHT IWIE TROTZDEM CHECK MAL AB WIESO UPDATE: ES GEHT WEIL ZEILE 732 (triggsAndEffcs.triggerRefs.add(createRef(reactor, null, outputName));)
                                 var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
                                 reactor.getConnections().add(inputConn);
                             }
@@ -726,7 +745,7 @@ public class BehaviorTreeTransformation {
                                                       // update: WIR WOLLEN DOCH, dass das dann trotzdem rangefügt wird!
                                                       // es werden bei #lock alle trigger rüberkopiert
                             triggsAndEffcs = new TriggerAndEffectRefs();
-                            if (reactorInputNames.contains(outputName)) {
+                            if (reactorInputNames.contains(outputName)) { // HIER WIRD LOCAL AUCH VON DRAUSSEN GENOMMEN (EIG SOLL JA IMMER VALIDATE!!)
                                 triggsAndEffcs.triggerRefs.add(createRef(reactor, null, outputName));
                             }
                         } else if (keyName.charAt(0) == '#'){
@@ -1105,7 +1124,7 @@ public class BehaviorTreeTransformation {
     
     
     private Reactor transformParallel(Parallel par, List<Reactor> newReactors, HashMap<BehaviorTreeNode, NodesLocalOutInputs> nodeToLocalOutInputs) {
-        int M = (par.getM() != 0)? par.getM() : par.getNodes().size();
+        int M = (par.getM() != 0)? par.getM() : par.getNodes().size();  // TODO hier sollte noch 0 support rein
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         reactor.setName("Par" + nodeNameCounter++);
@@ -1178,7 +1197,7 @@ public class BehaviorTreeTransformation {
         newReactors.add(reactor);
         // TODO richtige benennung von allen task, seq, fb
         String nameOfTask = task.getTaskName() == null ? 
-                                "NodeTask" + (nodeNameCounter++) :
+                                "Task" + (nodeNameCounter++) :
                                  task.getTaskName();
         reactor.setName(nameOfTask);
         
@@ -1242,12 +1261,12 @@ public class BehaviorTreeTransformation {
         reaction.getEffects().add(createRef(reactor, null, FAILURE));
 
         for (var input : reactor.getInputs()) {
-            if (input.getLocal() != null)
+            if (!input.getName().equals(START))  // TODO CHANGED
             reaction.getSources().add(createRef(reactor, null, input.getName()));
         }
         
         for (var output : reactor.getOutputs()) {
-            if (output.getLocal() != null)
+            if (!output.getName().equals(SUCCESS) && !output.getName().equals(FAILURE))  // TODO CHANGED
             reaction.getEffects().add(createRef(reactor, null, output.getName()));
         }
 

@@ -123,7 +123,7 @@ BehaviorTree:
     (attributes+=Attribute)*
     'btree' (name=ID)? // TODO behaviortree statt btree
     '{'
-    ((inputs+=Input) | (outputs+=Output))*  // locals hinzufügen
+    ((inputs+=Input) | (outputs+=Output))* 
     rootNode=BehaviorTreeNode?
     '}'                                            
 ;
