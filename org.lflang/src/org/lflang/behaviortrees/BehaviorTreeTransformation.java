@@ -172,6 +172,7 @@ public class BehaviorTreeTransformation {
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
 
         // Init set all inputs and outputs from declared bt. 
+        addImplictInterface(bt);
         copyInOutputs(reactor, bt.getOutputs(), bt.getInputs());
         
         
