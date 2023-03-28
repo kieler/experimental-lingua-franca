@@ -168,8 +168,8 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
         var node = _kNodeExtensions.createNode();
         DiagramSyntheses.setLayoutOption(node, CoreOptions.NODE_SIZE_CONSTRAINTS, EnumSet.of(SizeConstraint.MINIMUM_SIZE, SizeConstraint.NODE_LABELS));
         _kNodeExtensions.setMinimalNodeSize(node, 25, 25);
-        associateWith(node, reactor.getDefinition().getReactorClass());
-        _utilityExtensions.setID(node, reactor.uniqueID());
+        //associateWith(node, reactor.getDefinition().getReactorClass());
+        //_utilityExtensions.setID(node, reactor.uniqueID());
         
         KContainerRendering figure;
         switch(type) {
