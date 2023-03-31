@@ -176,13 +176,12 @@ public class BehaviorTreeTransformation {
         copyInOutputs(reactor, bt.getOutputs(), bt.getInputs());
         
         
-        var localOutputDependencies = new HashMap<Local, List<String>>();   // TODO change to List<Integer>
-        var localInputDependencies = new HashMap<Local, List<String>>();
-        resolveLocalDependencies(bt.getRootNode(), "0", localOutputDependencies, localInputDependencies);
-        var deleteThis2 = new HashMap<BehaviorTreeNode, NodesLocalOutInputs>();
-        var nodesToLocalOutInputs = computeNodesLocalOutInputs(bt.getRootNode(), localOutputDependencies, localInputDependencies, deleteThis2);
+        var localOuts = new HashMap<Local, List<String>>();   // TODO change to List<Integer>
+        var localIns = new HashMap<Local, List<String>>();
+        computeLocalPaths(bt.getRootNode(), "0", localOuts, localIns);
+        var nodesLocals = computeNodesLocals(bt.getRootNode(), localOuts, localIns, new HashMap<BehaviorTreeNode, NodesLocalOutInputs>());
         // Transform BT root
-        var nodeReactor = transformNode(bt.getRootNode(), newReactors, nodesToLocalOutInputs);
+        var nodeReactor = transformNode(bt.getRootNode(), newReactors, nodesLocals);
         var instance = LFF.createInstantiation();
         instance.setReactorClass(nodeReactor);
         instance.setName("root");
@@ -255,7 +254,7 @@ public class BehaviorTreeTransformation {
 
     }
                     // TODO: change inputDep and outputDep NICHT MEHR 2 hashmaps sondern rechte seite einfach neue klasse
-    private void resolveLocalDependencies(BehaviorTreeNode seqOrFb, String path, HashMap<Local, List<String>> outputDep, HashMap<Local, List<String>> inputDep) {
+    private void computeLocalPaths(BehaviorTreeNode seqOrFb, String path, HashMap<Local, List<String>> outputDep, HashMap<Local, List<String>> inputDep) {
         if (seqOrFb instanceof Parallel) return; // EList getNodes ist sortiert ! wichtig für paths
         if (seqOrFb instanceof Task) return;
         
@@ -294,7 +293,7 @@ public class BehaviorTreeTransformation {
                     }
                 } else if (node instanceof Sequence || node instanceof Fallback || node instanceof Parallel) {
                     String debugPath = path + "-" + i;
-                    resolveLocalDependencies(node, debugPath, outputDep, inputDep);
+                    computeLocalPaths(node, debugPath, outputDep, inputDep);
                 }
                 i++;
             }
@@ -325,7 +324,7 @@ public class BehaviorTreeTransformation {
                     }
                 } else if (node instanceof Sequence || node instanceof Fallback) {
                     String debugPath = path + "-" + i;
-                    resolveLocalDependencies(node, debugPath, outputDep, inputDep);
+                    computeLocalPaths(node, debugPath, outputDep, inputDep);
                 }
                 i++;
             }
@@ -356,7 +355,7 @@ public class BehaviorTreeTransformation {
                     }
                 } else if (node instanceof Sequence || node instanceof Fallback || node instanceof Parallel) {
                     String debugPath = path + "-" + i;
-                    resolveLocalDependencies(node, debugPath, outputDep, inputDep);
+                    computeLocalPaths(node, debugPath, outputDep, inputDep);
                 }
                 i++;
             }
@@ -364,7 +363,7 @@ public class BehaviorTreeTransformation {
         
     }
 
-    private HashMap<BehaviorTreeNode, NodesLocalOutInputs> computeNodesLocalOutInputs(BehaviorTreeNode root, HashMap<Local, List<String>> outDep, HashMap<Local, List<String>> inDep, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
+    private HashMap<BehaviorTreeNode, NodesLocalOutInputs> computeNodesLocals(BehaviorTreeNode root, HashMap<Local, List<String>> outDep, HashMap<Local, List<String>> inDep, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
         HashSet<Local> set = new HashSet<Local>(outDep.keySet());
         set.addAll(inDep.keySet());
         for (var local : set) {
@@ -374,8 +373,8 @@ public class BehaviorTreeTransformation {
                 var lastReceiver = inputs.get(inputs.size() - 1);
                 var firstSender = outputs.get(0);
                 
-                recursiveOutputComputation(root, local, outDep.get(local) ,lastReceiver, result);
-                recursiveInputComputation(root, local, inDep.get(local), firstSender, result);                
+                iterativeOutputComputation(root, local, outDep.get(local) ,lastReceiver, result);
+                iterativeInputComputation(root, local, inDep.get(local), firstSender, result);                
             }
         }
 //        for (var output : outDep.entrySet()) {  // Wäre etwas übersichtlicher wenn ein local zurzeit durchgegangen wird
@@ -394,7 +393,7 @@ public class BehaviorTreeTransformation {
         return result;
     }
     
-    private void recursiveInputComputation(BehaviorTreeNode root, Local local, List<String> paths , String firstSender, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
+    private void iterativeInputComputation(BehaviorTreeNode root, Local local, List<String> paths , String firstSender, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
         var firstSenderTemp = firstSender.split("-");
         var firstSenderArr = Stream.of(firstSenderTemp).mapToInt(Integer::parseInt).toArray();
 
@@ -492,7 +491,7 @@ public class BehaviorTreeTransformation {
         }
     }
     
-    private void recursiveOutputComputation(BehaviorTreeNode root, Local local, List<String> paths , String lastReceiver, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
+    private void iterativeOutputComputation(BehaviorTreeNode root, Local local, List<String> paths , String lastReceiver, HashMap<BehaviorTreeNode, NodesLocalOutInputs> result) {
         var lastRcvTemp = lastReceiver.split("-");
         var lastRecvArr = Stream.of(lastRcvTemp).mapToInt(Integer::parseInt).toArray();
         
@@ -620,8 +619,7 @@ public class BehaviorTreeTransformation {
 
         setBTInterface(reactor);
         
-        // reaction will output failure, if any child produces failure
-        var reactionFailure = createMergedOutputReaction(reactor, FAILURE);
+        
         
 
         var seqLocalInOutputs = nodeToLocalOutInputs.remove(seq);
@@ -654,10 +652,13 @@ public class BehaviorTreeTransformation {
             }
         }
         
+     // reaction will output failure, if any child produces failure
+        var reactionFailure = createMergedOutputReaction(reactor, FAILURE);
+        
         int i = 0;
         var last = new ReactorAndInst(reactor, null); // kann wieder lastR und lastIn sein
-        var localSenders = new TreeMap<String,TriggerAndEffectRefs>(); // TreeMap um die Reihenfolge zu behalten // <LocalNameAndLock verworfen, weil dann net mehr suche geht (sonst zweite HashMap) TODO besprechen
-        var localReactions = new ArrayList<TriggerAndEffectRefs>();
+        var localCompleted = new ArrayList<TriggerAndEffectRefs>();
+        var localCommunication = new TreeMap<String,TriggerAndEffectRefs>(); // TreeMap um die Reihenfolge zu behalten // <LocalNameAndLock verworfen, weil dann net mehr suche geht (sonst zweite HashMap) TODO besprechen
         var sequentialOutputs = new HashMap<String, ArrayList<VarRef>>();
         for (var node : seq.getNodes()) {
             
@@ -686,10 +687,10 @@ public class BehaviorTreeTransformation {
                         reactor.getConnections().add(inputConn);
                     } else {
                         
-                        var keyName = localSenders.keySet().stream().filter(x -> x.contains(inputName)).findFirst().orElse(null);
+                        var keyName = localCommunication.keySet().stream().filter(x -> x.contains(inputName)).findFirst().orElse(null);
                         TriggerAndEffectRefs triggsAndEffcs = null;
                         if (keyName != null) {
-                            triggsAndEffcs = localSenders.get(keyName);
+                            triggsAndEffcs = localCommunication.get(keyName);
                         }
                         
                         if (triggsAndEffcs == null) { // DH ES ist ein local und keine task innerhalb der sequence gerad hat auf den geschrieben -> ERGO EINFACH DIREKT VERBINDEN
@@ -701,11 +702,11 @@ public class BehaviorTreeTransformation {
                         } else {
                                String localNameWriteLock = keyName;
                                if (keyName.charAt(0) != '#') {
-                                   localSenders.remove(keyName);
+                                   localCommunication.remove(keyName);
                                    localNameWriteLock = "#" + keyName;
                                }
                                triggsAndEffcs.effectRefs.add(createRef(nodeReactor, instance, nodeInput.getName()));
-                               localSenders.put(localNameWriteLock, triggsAndEffcs);
+                               localCommunication.put(localNameWriteLock, triggsAndEffcs);
                            }
                     }
                 }
@@ -734,10 +735,10 @@ public class BehaviorTreeTransformation {
                         } 
                         
                         // was wenn # vorne? finden wir den dann überhaupt hier? JA, weil contains checkt substring
-                        var keyName = localSenders.keySet().stream().filter(x -> x.contains(outputName)).findFirst().orElse(null);
+                        var keyName = localCommunication.keySet().stream().filter(x -> x.contains(outputName)).findFirst().orElse(null);
                         TriggerAndEffectRefs triggsAndEffcs = null;
                         if (keyName != null) {
-                            triggsAndEffcs = localSenders.get(keyName);
+                            triggsAndEffcs = localCommunication.get(keyName);
                         }
                         
                         if (triggsAndEffcs == null) { // TODO: validate: Hier kommt man nur rein, wenn zum ersten mal mit dem comp
@@ -750,17 +751,17 @@ public class BehaviorTreeTransformation {
                                 triggsAndEffcs.triggerRefs.add(createRef(reactor, null, outputName));
                             }
                         } else if (keyName.charAt(0) == '#'){
-                            localReactions.add(triggsAndEffcs);
+                            localCompleted.add(triggsAndEffcs);
                             triggsAndEffcs = new TriggerAndEffectRefs();
-                            for (var trigger : localSenders.get(keyName).triggerRefs) {
+                            for (var trigger : localCommunication.get(keyName).triggerRefs) {
                                 var copyTrigger = EcoreUtil.copy(trigger);
                                 triggsAndEffcs.triggerRefs.add(copyTrigger);
                             }
-                            localSenders.remove(keyName);
+                            localCommunication.remove(keyName);
                             
                         }
                         triggsAndEffcs.triggerRefs.add(createRef(nodeReactor, instance, outputName));
-                        localSenders.put(outputName, triggsAndEffcs);
+                        localCommunication.put(outputName, triggsAndEffcs);
                     }
                 }
             }
@@ -794,12 +795,12 @@ public class BehaviorTreeTransformation {
                 reactor, null, SUCCESS);
         reactor.getConnections().add(connSuccess);
 
-        for (var entry : localSenders.entrySet()) {
-            localReactions.add(entry.getValue());
+        for (var entry : localCommunication.entrySet()) {
+            localCompleted.add(entry.getValue());
         }
         
      // LOCALS IN SAME SEQUENCE! change this to generic
-        for (var triggsAndEffcs : localReactions) {
+        for (var triggsAndEffcs : localCompleted) {
             if (!triggsAndEffcs.effectRefs.isEmpty()) { // TODO überhaupt nötig?
                 var reaction = LFF.createReaction();
                 
