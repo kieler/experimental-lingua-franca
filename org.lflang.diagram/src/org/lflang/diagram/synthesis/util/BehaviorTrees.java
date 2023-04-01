@@ -24,10 +24,12 @@
 ***************/
 package org.lflang.diagram.synthesis.util;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.elk.alg.layered.options.EdgeStraighteningStrategy;
 import org.eclipse.elk.alg.layered.options.FixedAlignment;
@@ -72,8 +74,13 @@ import de.cau.cs.kieler.klighd.syntheses.DiagramSyntheses;
 public class BehaviorTrees extends AbstractSynthesisExtensions {
     
     // Related synthesis option
+    public static final SynthesisOption BT_CATEGORY = 
+            SynthesisOption.createCategory("Behavior Trees", false).setCategory(LinguaFrancaSynthesis.APPEARANCE);
     public static final SynthesisOption SHOW_BT = 
-            SynthesisOption.createCheckOption("Detect Behavior Trees", false).setCategory(LinguaFrancaSynthesis.APPEARANCE);
+            SynthesisOption.createCheckOption("Tree Structure", true).setCategory(BT_CATEGORY);
+    public static final Map<String, Direction> BT_DIRECTIONS = Map.of("Top-Down", Direction.DOWN, "Left-Right", Direction.RIGHT);
+    public static final SynthesisOption BT_DIRECTION = 
+            SynthesisOption.createChoiceOption("Layout Direction", new ArrayList<>(BT_DIRECTIONS.keySet()), "Top-Down").setCategory(BT_CATEGORY);
         
     @Inject @Extension private KNodeExtensions _kNodeExtensions;
     @Inject @Extension private KEdgeExtensions _kEdgeExtensions;
@@ -83,6 +90,8 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
     @Inject @Extension private KContainerRenderingExtensions _kContainerRenderingExtensions;
     @Inject @Extension private LinguaFrancaStyleExtensions _linguaFrancaStyleExtensions;
     @Inject @Extension private UtilityExtensions _utilityExtensions;
+    
+    
 
     public void handleBehaviorTrees(List<KNode> nodes, ReactorInstance reactor) {
         if (getBooleanValue(SHOW_BT)) {
@@ -141,7 +150,7 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
         if (getBooleanValue(SHOW_BT) && getBTNodeType(reactor) == NodeType.ROOT) {
             // Layout
             DiagramSyntheses.setLayoutOption(node, CoreOptions.ALGORITHM, LayeredOptions.ALGORITHM_ID);
-            DiagramSyntheses.setLayoutOption(node, CoreOptions.DIRECTION, Direction.DOWN);
+            DiagramSyntheses.setLayoutOption(node, CoreOptions.DIRECTION, BT_DIRECTIONS.getOrDefault(getObjectValue(BT_DIRECTION), Direction.DOWN));
             DiagramSyntheses.setLayoutOption(node, LayeredOptions.NODE_PLACEMENT_STRATEGY, NodePlacementStrategy.BRANDES_KOEPF);
             DiagramSyntheses.setLayoutOption(node, LayeredOptions.NODE_PLACEMENT_BK_FIXED_ALIGNMENT, FixedAlignment.BALANCED);
             DiagramSyntheses.setLayoutOption(node, LayeredOptions.NODE_PLACEMENT_BK_EDGE_STRAIGHTENING, EdgeStraighteningStrategy.IMPROVE_STRAIGHTNESS);
