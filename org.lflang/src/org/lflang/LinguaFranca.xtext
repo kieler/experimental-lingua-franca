@@ -137,7 +137,7 @@ Task:
     {Task}
 //    (attributes+=Attribute)*
     ('task'|condition?='condition')
-    (taskName=STRING)?
+    (label=STRING)?
     (
         (taskSources+=VarRef (',' taskSources+=VarRef)*)?
         ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
@@ -170,7 +170,9 @@ Local:
 
 Sequence:
     {Sequence}
-    'sequence' '{'
+    'sequence'
+    (label=STRING)?
+    '{'
         locals+=Local*
         nodes+=BehaviorTreeNode*
     '}'
@@ -178,7 +180,9 @@ Sequence:
 
 Fallback:
     {Fallback}
-    'fallback' '{'
+    'fallback'
+    (label=STRING)?
+    '{'
         locals+=Local*
         nodes+=BehaviorTreeNode*
     '}'    
@@ -186,7 +190,10 @@ Fallback:
 
 Parallel:
     {Parallel}
-    'parallel' (M=INT)? '{'
+    'parallel'
+    (label=STRING)?
+    (M=INT)?
+    '{'
         locals+=Local*
         nodes+=BehaviorTreeNode*
     '}'

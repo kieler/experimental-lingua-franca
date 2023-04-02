@@ -605,7 +605,10 @@ public class BehaviorTreeTransformation {
         // TODO vielleicht LÖSUNG FÜR BESSERE PERFORMANCE: LISTE MIT INPUTS UND OUTPUTS    var inputs = new ArrayList<Input>();
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Seq" + nodeNameCounter++);
+        String label = seq.getLabel() == null ? 
+                "Seq" + nodeNameCounter++ :
+                 seq.getLabel();
+        reactor.setName(label);
         addBTNodeAnnotation(reactor, NodeType.SEQUENCE.toString());
 
         setBTInterface(reactor);
@@ -887,7 +890,10 @@ public class BehaviorTreeTransformation {
     private Reactor transformFallback(Fallback fb, List<Reactor> newReactors, HashMap<BehaviorTreeNode, NodesLocalOutInputs> nodeToLocalOutInputs) {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Fb" + nodeNameCounter++);
+        String label = fb.getLabel() == null ? 
+                "Fb" + nodeNameCounter++ :
+                 fb.getLabel();
+        reactor.setName(label);
         addBTNodeAnnotation(reactor, NodeType.FALLBACK.toString());
 
         setBTInterface(reactor);
@@ -1120,7 +1126,10 @@ public class BehaviorTreeTransformation {
         int M = (par.getM() != 0)? par.getM() : par.getNodes().size();
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
-        reactor.setName("Par" + nodeNameCounter++);
+        String label = par.getLabel() == null ? 
+                "Par" + nodeNameCounter++ :
+                 par.getLabel();
+        reactor.setName(label);
         addBTNodeAnnotation(reactor, NodeType.PARALLEL.toString());
 
         setBTInterface(reactor);
@@ -1189,10 +1198,10 @@ public class BehaviorTreeTransformation {
         var reactor = LFF.createReactor();
         newReactors.add(reactor);
         // TODO richtige benennung von allen task, seq, fb
-        String nameOfTask = task.getTaskName() == null ? 
+        String label = task.getLabel() == null ? 
                                 "NodeTask" + (nodeNameCounter++) :
-                                 task.getTaskName();
-        reactor.setName(nameOfTask);
+                                 task.getLabel();
+        reactor.setName(label);
         
         String btNodeAnnot = task.isCondition() ?
                                NodeType.CONDITION.toString() :
