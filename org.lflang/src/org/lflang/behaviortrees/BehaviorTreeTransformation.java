@@ -627,7 +627,7 @@ public class BehaviorTreeTransformation {
                     var copyType = EcoreUtil.copy(localToInput.getType());
                     input.setType(copyType);
                     
-                    input.setLocal("true");
+//                    input.setLocal("true");
                     
                     reactor.getInputs().add(input);
                 }
@@ -640,7 +640,7 @@ public class BehaviorTreeTransformation {
                     var copyType = EcoreUtil.copy(localToOutput.getType());
                     output.setType(copyType);
                     
-                    output.setLocal("true");
+//                    output.setLocal("true");
                     
                     reactor.getOutputs().add(output);
                 }
@@ -678,13 +678,13 @@ public class BehaviorTreeTransformation {
                     } else if (reactorInputNames.contains(inputName)) {
                         var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
                         reactor.getConnections().add(inputConn);
-                    } else if (nodeInput.getLocal() == null) {
-                        if (!reactorInputNames.contains(inputName)) {
-                            var copyInput = EcoreUtil.copy(nodeInput);
-                            reactor.getInputs().add(copyInput);
-                        }
-                        var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
-                        reactor.getConnections().add(inputConn);
+//                    } else if (nodeInput.getLocal() == null) {
+//                        if (!reactorInputNames.contains(inputName)) {
+//                            var copyInput = EcoreUtil.copy(nodeInput);
+//                            reactor.getInputs().add(copyInput);
+//                        }
+//                        var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
+//                        reactor.getConnections().add(inputConn);
                     } else {
                         
                         var keyName = localSenders.keySet().stream().filter(x -> x.contains(inputName)).findFirst().orElse(null);
@@ -724,15 +724,15 @@ public class BehaviorTreeTransformation {
                         if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
                         triggers.add(createRef(nodeReactor, instance, outputName));
                         sequentialOutputs.put(outputName, triggers);
-                    } else if (nodeOutput.getLocal() == null) {
-                        if (!reactorOutputNames.contains(outputName)) {
-                            var copyOutput = EcoreUtil.copy(nodeOutput);
-                            reactor.getOutputs().add(copyOutput);
-                        }
-                        var triggers = sequentialOutputs.get(outputName);
-                        if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
-                        triggers.add(createRef(nodeReactor, instance, outputName));
-                        sequentialOutputs.put(outputName, triggers);
+//                    } else if (nodeOutput.getLocal() == null) {
+//                        if (!reactorOutputNames.contains(outputName)) {
+//                            var copyOutput = EcoreUtil.copy(nodeOutput);
+//                            reactor.getOutputs().add(copyOutput);
+//                        }
+//                        var triggers = sequentialOutputs.get(outputName);
+//                        if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
+//                        triggers.add(createRef(nodeReactor, instance, outputName));
+//                        sequentialOutputs.put(outputName, triggers);
                     } else {
                         var keyName = localSenders.keySet().stream().filter(x -> x.contains(outputName)).findFirst().orElse(null);
                         TriggerAndEffectRefs triggsAndEffcs = null;
@@ -910,7 +910,7 @@ public class BehaviorTreeTransformation {
                     var copyType = EcoreUtil.copy(localToInput.getType());
                     input.setType(copyType);
                     
-                    input.setLocal("true");
+//                    input.setLocal("true");
                     
                     reactor.getInputs().add(input);
                 }
@@ -923,7 +923,7 @@ public class BehaviorTreeTransformation {
                     var copyType = EcoreUtil.copy(localToOutput.getType());
                     output.setType(copyType);
                     
-                    output.setLocal("true");
+//                    output.setLocal("true");
                     
                     reactor.getOutputs().add(output);
                 }
@@ -957,13 +957,13 @@ public class BehaviorTreeTransformation {
                     if (reactorInputNames.contains(inputName)) {
                         var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
                         reactor.getConnections().add(inputConn);
-                    } else if (nodeInput.getLocal() == null) {
-                        if (!reactorInputNames.contains(inputName)) {
-                            var copyInput = EcoreUtil.copy(nodeInput);
-                            reactor.getInputs().add(copyInput);
-                        }
-                        var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
-                        reactor.getConnections().add(inputConn);
+//                    } else if (nodeInput.getLocal() == null) {
+//                        if (!reactorInputNames.contains(inputName)) {
+//                            var copyInput = EcoreUtil.copy(nodeInput);
+//                            reactor.getInputs().add(copyInput);
+//                        }
+//                        var inputConn = createConn(reactor, null, inputName, nodeReactor, instance, inputName);
+//                        reactor.getConnections().add(inputConn);
                     } else {
                         
                         var keyName = localSenders.keySet().stream().filter(x -> x.contains(inputName)).findFirst().orElse(null);
@@ -1004,15 +1004,15 @@ public class BehaviorTreeTransformation {
                         if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
                         triggers.add(createRef(nodeReactor, instance, outputName));
                         sequentialOutputs.put(outputName, triggers);
-                    } else if (nodeOutput.getLocal() == null) {
-                        if (!reactorOutputNames.contains(outputName)) {
-                            var copyOutput = EcoreUtil.copy(nodeOutput);
-                            reactor.getOutputs().add(copyOutput);
-                        }
-                        var triggers = sequentialOutputs.get(outputName);
-                        if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
-                        triggers.add(createRef(nodeReactor, instance, outputName));
-                        sequentialOutputs.put(outputName, triggers);
+//                    } else if (nodeOutput.getLocal() == null) {
+//                        if (!reactorOutputNames.contains(outputName)) {
+//                            var copyOutput = EcoreUtil.copy(nodeOutput);
+//                            reactor.getOutputs().add(copyOutput);
+//                        }
+//                        var triggers = sequentialOutputs.get(outputName);
+//                        if (triggers == null) { triggers = new ArrayList<VarRef>(); } 
+//                        triggers.add(createRef(nodeReactor, instance, outputName));
+//                        sequentialOutputs.put(outputName, triggers);
                     } else {
                         var keyName = localSenders.keySet().stream().filter(x -> x.contains(outputName)).findFirst().orElse(null);
                         TriggerAndEffectRefs triggsAndEffcs = null;
@@ -1232,7 +1232,7 @@ public class BehaviorTreeTransformation {
                     var copyType = EcoreUtil.copy(localToInput.getType());
                     input.setType(copyType);
                     
-                    input.setLocal("true");
+//                    input.setLocal("true");
                     
                     reactor.getInputs().add(input);
                 }
@@ -1245,7 +1245,7 @@ public class BehaviorTreeTransformation {
                     var copyType = EcoreUtil.copy(localToOutput.getType());
                     output.setType(copyType);
                     
-                    output.setLocal("true");
+//                    output.setLocal("true");
                     
                     reactor.getOutputs().add(output);
                 }
@@ -1270,12 +1270,12 @@ public class BehaviorTreeTransformation {
         reaction.getEffects().add(createRef(reactor, null, FAILURE));
 
         for (var input : reactor.getInputs()) {
-            if (input.getLocal() != null)
+//            if (input.getLocal() != null)
             reaction.getSources().add(createRef(reactor, null, input.getName()));
         }
         
         for (var output : reactor.getOutputs()) {
-            if (output.getLocal() != null)
+//            if (output.getLocal() != null)
             reaction.getEffects().add(createRef(reactor, null, output.getName()));
         }
 
@@ -1335,9 +1335,7 @@ public class BehaviorTreeTransformation {
         attr.setAttrName("btnode");
         var param = LFF.createAttrParm();
         attr.getAttrParms().add(param);
-        var value = LFF.createAttrParmValue();
-        value.setStr(type);
-        param.setValue(value);
+        param.setValue(type);
         reactor.getAttributes().add(attr);
     }
 

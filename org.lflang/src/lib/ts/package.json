@@ -1,16 +1,8 @@
 {
     "name": "LinguaFrancaDefault",
-    "version": "0.0.1",
-    "description": "A default Lingua Franca project for the TypeScript target",
     "type": "commonjs",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/icyphy/lingua-franca"
-    },
-    "license": "BSD-2-Clause",
     "dependencies": {
-        "reactor-ts": "file:./reactor-ts",
-        "@types/reactor-ts": "file:./reactor-ts",
+        "@lf-lang/reactor-ts": "0.3.2",
         "@babel/cli": "^7.8.4",
         "@babel/core": "^7.8.7",
         "@babel/node": "^7.8.7",
@@ -25,8 +17,12 @@
         "rimraf": "^3.0.2"
     },
     "devDependencies": {
+        "@types/command-line-args": "^5.2.0",
+        "@types/command-line-usage": "^5.0.2",
+        "@types/jest": "^27.0.0",
+        "@types/microtime": "^2.1.0",
+        "@types/node": "^16.3.3",
         "@types/google-protobuf": "^3.7.4",
-        "@types/node": "^13.9.2",
         "@types/uuid": "^8.3.4",
         "@typescript-eslint/eslint-plugin": "5.33.0",
         "@typescript-eslint/parser": "^5.8.1",

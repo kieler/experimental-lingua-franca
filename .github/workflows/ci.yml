@@ -20,10 +20,21 @@ jobs:
   cancel:
     uses: lf-lang/lingua-franca/.github/workflows/cancel.yml@master
 
-  # Test the Maven build.
+  # Test the Gradle and Maven build.
   build:
     uses: lf-lang/lingua-franca/.github/workflows/build.yml@master
     needs: cancel
+
+  # Build the tools used for processing execution traces
+  build-tracing-tools:
+    uses: lf-lang/lingua-franca/.github/workflows/build-trace-tools.yml@master
+    needs: cancel
+
+  # Check that automatic code formatting works.
+  # TODO: Uncomment after fed-gen is merged.
+  # format:
+  #   uses: lf-lang/lingua-franca/.github/workflows/format.yml@master
+  #   needs: cancel
 
   # Run the unit tests.
   unit-tests:
@@ -37,7 +48,7 @@ jobs:
 
   # Run the C benchmark tests.
   c-benchmark-tests:
-    uses: lf-lang/benchmarks-lingua-franca/.github/workflows/benchmark-tests.yml@fetch-depth-0
+    uses: lf-lang/benchmarks-lingua-franca/.github/workflows/benchmark-tests.yml@main
     with:
       target: 'C'
     needs: cancel
@@ -56,6 +67,16 @@ jobs:
   c-tests:
     uses: lf-lang/lingua-franca/.github/workflows/c-tests.yml@master
     needs: cancel
+  
+  # Run the C Arduino integration tests.
+  c-arduino-tests:
+    uses: lf-lang/lingua-franca/.github/workflows/c-arduino-tests.yml@master
+    needs: cancel
+  
+  # Run the C Zephyr integration tests.
+  c-zephyr-tests:
+    uses: lf-lang/lingua-franca/.github/workflows/c-zephyr-tests.yml@master
+    needs: cancel
 
   # Run the CCpp integration tests.
   ccpp-tests:
@@ -66,7 +87,7 @@ jobs:
 
   # Run the C++ benchmark tests.
   cpp-benchmark-tests:
-    uses: lf-lang/benchmarks-lingua-franca/.github/workflows/benchmark-tests.yml@fetch-depth-0
+    uses: lf-lang/benchmarks-lingua-franca/.github/workflows/benchmark-tests.yml@main
     with:
       target: 'Cpp'
     needs: cancel
@@ -93,7 +114,7 @@ jobs:
 
   # Run the Rust benchmark tests.
   rs-benchmark-tests:
-    uses: lf-lang/benchmarks-lingua-franca/.github/workflows/benchmark-tests.yml@fetch-depth-0
+    uses: lf-lang/benchmarks-lingua-franca/.github/workflows/benchmark-tests.yml@main
     with:
       target: 'Rust'
     needs: cancel

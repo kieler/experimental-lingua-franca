@@ -43,8 +43,8 @@ import org.lflang.util.FileUtil;
  *
  * Adapted from @see org.lflang.generator.CppCmakeGenerator.kt
  *
- * @author Soroush Bateni <soroush@utdallas.edu>
- * @author Peter Donovan <peterdonovan@berkeley.edu>
+ * @author Soroush Bateni
+ * @author Peter Donovan
  */
 public class CCmakeGenerator {
     private static final String DEFAULT_INSTALL_CODE = """
@@ -53,6 +53,8 @@ public class CCmakeGenerator {
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     """;
+
+    public static final String MIN_CMAKE_VERSION = "3.19";
 
     private final FileConfig fileConfig;
     private final List<String> additionalSources;
@@ -115,10 +117,42 @@ public class CCmakeGenerator {
         additionalSources.addAll(this.additionalSources);
         cMakeCode.newLine();
 
-        cMakeCode.pr("cmake_minimum_required(VERSION 3.13)");
-        cMakeCode.pr("project("+executableName+" LANGUAGES C)");
+        cMakeCode.pr("cmake_minimum_required(VERSION " + MIN_CMAKE_VERSION + ")");
 
+        if (targetConfig.platformOptions.platform == Platform.ZEPHYR) {
+            cMakeCode.pr("# Set default configuration file. To add custom configurations,");
+            cMakeCode.pr("# pass -- -DOVERLAY_CONFIG=my_config.prj to either cmake or west");
+            cMakeCode.pr("set(CONF_FILE prj_lf.conf)");
+            if (targetConfig.platformOptions.board != null) {
+                cMakeCode.pr("# Selecting board specified in target property");
+                cMakeCode.pr("set(BOARD "+targetConfig.platformOptions.board+")");
+            } else {
+                cMakeCode.pr("# Selecting default board");
+                cMakeCode.pr("set(BOARD qemu_cortex_m3)");
+            }
+            cMakeCode.pr("# We require Zephyr version 3.2.0");
+            cMakeCode.pr("find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE} EXACT 3.2.0)");
+            cMakeCode.newLine();
+        }
+
+        cMakeCode.pr("project("+executableName+" LANGUAGES C)");
         cMakeCode.newLine();
+
+        // The Test build type is the Debug type plus coverage generation
+        cMakeCode.pr("if(CMAKE_BUILD_TYPE STREQUAL \"Test\")");
+        cMakeCode.pr("  set(CMAKE_BUILD_TYPE \"Debug\")");
+        cMakeCode.pr("  if(CMAKE_C_COMPILER_ID STREQUAL \"GNU\")");
+        cMakeCode.pr("    find_program(LCOV_BIN lcov)");
+        cMakeCode.pr("    if(LCOV_BIN MATCHES \"lcov$\")");
+        cMakeCode.pr("      set(CMAKE_C_FLAGS \"${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage\")");
+        cMakeCode.pr("    else()");
+        cMakeCode.pr("      message(\"Not producing code coverage information since lcov was not found\")");
+        cMakeCode.pr("    endif()");
+        cMakeCode.pr("  else()");
+        cMakeCode.pr("    message(\"Not producing code coverage information since the selected compiler is no gcc\")");
+        cMakeCode.pr("  endif()");
+        cMakeCode.pr("endif()");
+
         cMakeCode.pr("# Require C11");
         cMakeCode.pr("set(CMAKE_C_STANDARD 11)");
         cMakeCode.pr("set(CMAKE_C_STANDARD_REQUIRED ON)");
@@ -147,6 +181,10 @@ public class CCmakeGenerator {
         cMakeCode.pr("endif()\n");
         cMakeCode.newLine();
 
+        cMakeCode.pr("# do not print install messages\n");
+        cMakeCode.pr("set(CMAKE_INSTALL_MESSAGE NEVER)\n");
+        cMakeCode.newLine();
+
         if (CppMode) {
             // Suppress warnings about const char*.
             cMakeCode.pr("set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-write-strings\")");
@@ -157,11 +195,25 @@ public class CCmakeGenerator {
             cMakeCode.pr("set(CMAKE_SYSTEM_NAME "+targetConfig.platformOptions.platform.getcMakeName()+")");
         }
 
-        cMakeCode.pr(setUpMainTarget.getCmakeCode(
-            hasMain,
-            executableName,
-            Stream.concat(additionalSources.stream(), sources.stream())
+        cMakeCode.pr("# Target definitions\n");
+        targetConfig.compileDefinitions.forEach((key, value) -> cMakeCode.pr(
+            "add_compile_definitions("+key+"="+value+")\n"
         ));
+        cMakeCode.newLine();
+
+        if (targetConfig.platformOptions.platform == Platform.ZEPHYR) {
+            cMakeCode.pr(setUpMainTargetZephyr(
+                hasMain,
+                executableName,
+                Stream.concat(additionalSources.stream(), sources.stream())
+            ));
+        } else {
+            cMakeCode.pr(setUpMainTarget.getCmakeCode(
+                hasMain,
+                executableName,
+                Stream.concat(additionalSources.stream(), sources.stream())
+            ));
+        }
 
         cMakeCode.pr("target_link_libraries(${LF_MAIN_TARGET} PRIVATE core)");
 
@@ -172,6 +224,22 @@ public class CCmakeGenerator {
         cMakeCode.pr("target_include_directories(${LF_MAIN_TARGET} PUBLIC include/core/modal_models)");
         cMakeCode.pr("target_include_directories(${LF_MAIN_TARGET} PUBLIC include/core/utils)");
 
+        if(targetConfig.auth) {
+            // If security is requested, add the auth option.
+            var osName = System.getProperty("os.name").toLowerCase();
+            // if platform target was set, use given platform instead
+            if (targetConfig.platformOptions.platform != Platform.AUTO) {
+                osName = targetConfig.platformOptions.platform.toString();
+            }
+            if (osName.contains("mac")) {
+                cMakeCode.pr("set(OPENSSL_ROOT_DIR /usr/local/opt/openssl)");
+            }
+            cMakeCode.pr("# Find OpenSSL and link to it");
+            cMakeCode.pr("find_package(OpenSSL REQUIRED)");
+            cMakeCode.pr("target_link_libraries( ${LF_MAIN_TARGET} PRIVATE OpenSSL::SSL)");
+            cMakeCode.newLine();
+        }
+
         if (targetConfig.threading || targetConfig.tracing != null) {
             // If threaded computation is requested, add the threads option.
             cMakeCode.pr("# Find threads and link to it");
@@ -181,16 +249,21 @@ public class CCmakeGenerator {
 
             // If the LF program itself is threaded or if tracing is enabled, we need to define
             // NUMBER_OF_WORKERS so that platform-specific C files will contain the appropriate functions
-            cMakeCode.pr("# Set the number of workers to enable threading");
+            cMakeCode.pr("# Set the number of workers to enable threading/tracing");
             cMakeCode.pr("target_compile_definitions(${LF_MAIN_TARGET} PUBLIC NUMBER_OF_WORKERS="+targetConfig.workers+")");
             cMakeCode.newLine();
         }
 
-        cMakeCode.pr("# Target definitions\n");
-        targetConfig.compileDefinitions.forEach((key, value) -> cMakeCode.pr(
-            "target_compile_definitions(${LF_MAIN_TARGET} PUBLIC "+key+"="+value+")\n"
-        ));
+        // Add additional flags so runtime can distinguish between multi-threaded and single-threaded mode
+        if (targetConfig.threading) {
+            cMakeCode.pr("# Set flag to indicate a multi-threaded runtime");
+            cMakeCode.pr("target_compile_definitions( ${LF_MAIN_TARGET} PUBLIC LF_THREADED=1)");
+        } else {
+            cMakeCode.pr("# Set flag to indicate a single-threaded runtime");
+            cMakeCode.pr("target_compile_definitions( ${LF_MAIN_TARGET} PUBLIC LF_UNTHREADED=1)");
+        }
         cMakeCode.newLine();
+
 
         if (CppMode) cMakeCode.pr("enable_language(CXX)");
 
@@ -243,11 +316,6 @@ public class CCmakeGenerator {
         cMakeCode.pr(installCode);
         cMakeCode.newLine();
 
-        if (targetConfig.platformOptions.platform == Platform.ARDUINO) {
-            cMakeCode.pr("target_link_arduino_libraries ( ${LF_MAIN_TARGET} AUTO_PUBLIC)");
-            cMakeCode.pr("target_enable_arduino_upload(${LF_MAIN_TARGET})");
-        }
-
         // Add the include file
         for (String includeFile : targetConfig.cmakeIncludesWithoutPath) {
             cMakeCode.pr("include(\""+includeFile+"\")");
@@ -288,6 +356,42 @@ public class CCmakeGenerator {
         }
         code.indent();
         code.pr("${LF_MAIN_TARGET}");
+        cSources.forEach(code::pr);
+        code.unindent();
+        code.pr(")");
+        code.newLine();
+        return code.toString();
+    }
+
+    private static String setUpMainTargetZephyr(
+        boolean hasMain,
+        String executableName,
+        Stream<String> cSources
+    ) {
+        var code = new CodeBuilder();
+        code.pr("add_subdirectory(core)");
+        code.pr("target_link_libraries(core PUBLIC zephyr_interface)");
+        // FIXME: Linking the reactor-c corelib with the zephyr kernel lib
+        //  resolves linker issues but I am not yet sure if it is safe
+        code.pr("target_link_libraries(core PRIVATE kernel)");
+        code.newLine();
+
+        if (hasMain) {
+            code.pr("# Declare a new executable target and list all its sources");
+            code.pr("set(LF_MAIN_TARGET app)");
+            code.pr("target_sources(");
+        } else {
+            code.pr("# Declare a new library target and list all its sources");
+            code.pr("set(LF_MAIN_TARGET"+executableName+")");
+            code.pr("add_library(");
+        }
+        code.indent();
+        code.pr("${LF_MAIN_TARGET}");
+
+        if (hasMain) {
+            code.pr("PRIVATE");
+        }
+
         cSources.forEach(code::pr);
         code.unindent();
         code.pr(")");

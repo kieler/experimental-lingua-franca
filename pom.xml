@@ -8,7 +8,7 @@
 
     <groupId>org.lflang</groupId>
     <artifactId>lf</artifactId>
-    <version>0.3.1-SNAPSHOT</version>
+    <version>0.4.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Lingua Franca</name>
@@ -60,18 +60,6 @@
                 <module>org.lflang.updatesite</module>
                 <module>org.lflang.product</module>
                 <module>org.lflang.rca</module>
-                <module>org.lflang.targetplatform</module>
-            </modules>
-        </profile>
-        <profile>
-            <id>lds</id>
-
-            <modules>
-                <module>org.lflang</module>
-                <module>org.lflang.ide</module>
-                <module>org.lflang.diagram</module>
-
-                <module>org.lflang.lds</module>
                 <module>org.lflang.targetplatform</module>
             </modules>
         </profile>
@@ -259,6 +247,11 @@
                             <os>macosx</os>
                             <ws>cocoa</ws>
                             <arch>x86_64</arch>
+                        </environment>
+                        <environment>
+                            <os>macosx</os>
+                            <ws>cocoa</ws>
+                            <arch>aarch64</arch>
                         </environment>
                     </environments>
                 </configuration>

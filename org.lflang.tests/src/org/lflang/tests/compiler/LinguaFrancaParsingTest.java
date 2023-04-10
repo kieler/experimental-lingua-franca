@@ -24,17 +24,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ***************/
 package org.lflang.tests.compiler;
 
-import com.google.inject.Inject;
 import org.eclipse.xtext.testing.InjectWith;
 import org.eclipse.xtext.testing.extensions.InjectionExtension;
 import org.eclipse.xtext.testing.util.ParseHelper;
-
-import org.lflang.lf.LfPackage;
-import org.lflang.lf.Model;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.lflang.lf.Model;
 import org.lflang.tests.LFInjectorProvider;
+
+import com.google.inject.Inject;
 
 /**
  * Test harness for ensuring that grammar captures
@@ -89,6 +89,18 @@ class LinguaFrancaParsingTest {
                     @ohio timer t;
                     @ohio input q: int;
                     @ohio output q2: int;
+                }
+            """;
+        parseWithoutError(testCase);
+    }
+
+    @Test
+    public void testTokenizeEmptyWidth() throws Exception {
+        String testCase = """
+                target C;
+                main reactor {
+                    state foo: int[];
+                    state foo: int[   ]; //spaces are allowed
                 }
             """;
         parseWithoutError(testCase);

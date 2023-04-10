@@ -38,6 +38,9 @@ import java.util.stream.Stream;
 
 import javax.inject.Inject;
 
+import org.eclipse.elk.alg.layered.options.EdgeStraighteningStrategy;
+import org.eclipse.elk.alg.layered.options.FixedAlignment;
+import org.eclipse.elk.alg.layered.options.GreedySwitchType;
 import org.eclipse.elk.alg.layered.options.LayerConstraint;
 import org.eclipse.elk.alg.layered.options.LayeredOptions;
 import org.eclipse.elk.alg.layered.options.NodePlacementStrategy;
@@ -65,6 +68,7 @@ import org.eclipse.xtext.xbase.lib.StringExtensions;
 import org.lflang.ASTUtils;
 import org.lflang.AttributeUtils;
 import org.lflang.InferredType;
+import org.lflang.ast.FormattingUtils;
 import org.lflang.behaviortrees.BehaviorTreeTransformation;
 import org.lflang.diagram.synthesis.action.CollapseAllReactorsAction;
 import org.lflang.diagram.synthesis.action.ExpandAllReactorsAction;
@@ -137,7 +141,7 @@ import de.cau.cs.kieler.klighd.util.KlighdProperties;
 /**
  * Diagram synthesis for Lingua Franca programs.
  * 
- * @author{Alexander Schulz-Rosengarten <als@informatik.uni-kiel.de>}
+ * @author Alexander Schulz-Rosengarten
  */
 @ViewSynthesisShared
 public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
@@ -289,7 +293,7 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
                 for (Reactor reactor : model.getReactors()) {
                     if (reactor == main) continue;
                     if (_btDiagrams.isGenerated(reactor)) continue;
-                    ReactorInstance reactorInstance = new ReactorInstance(reactor, new SynthesisErrorReporter(), new HashSet<>());
+                    ReactorInstance reactorInstance = new ReactorInstance(reactor, new SynthesisErrorReporter());
                     reactorNodes.addAll(createReactorNode(reactorInstance, main == null, 
                             HashBasedTable.<ReactorInstance, PortInstance, KPort>create(), 
                             HashBasedTable.<ReactorInstance, PortInstance, KPort>create(), 
@@ -1237,10 +1241,8 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
             var t = InferredType.fromAST(variable.getType());
             b.append(":").append(t.toOriginalText());
         }
-        if (!IterableExtensions.isNullOrEmpty(variable.getInit())) {
-            b.append("(");
-            b.append(IterableExtensions.join(variable.getInit(), ", ", ASTUtils::toOriginalText));
-            b.append(")");
+        if (variable.getInit() != null) {
+            b.append(FormattingUtils.render(variable.getInit()));
         }
         return b.toString();
     }
@@ -1405,7 +1407,7 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
     
     private Iterable<KNode> createUserComments(EObject element, KNode targetNode) {
         if (getBooleanValue(SHOW_USER_LABELS)) {
-            String commentText = AttributeUtils.label(element);
+            String commentText = AttributeUtils.getLabel(element);
             
             if (!StringExtensions.isNullOrEmpty(commentText)) {
                 KNode comment = _kNodeExtensions.createNode();

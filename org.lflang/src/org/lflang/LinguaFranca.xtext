@@ -121,12 +121,16 @@ TargetDecl:
 BehaviorTree:
     {BehaviorTree}
     (attributes+=Attribute)*
-    'btree' (name=ID)? // TODO behaviortree statt btree
+    'behaviortree' (name=ID)?
     ('(' parameters+=Parameter (',' parameters+=Parameter)* ')')?
     '{'
-    ((inputs+=Input) | (outputs+=Output))*  // locals hinzufügen
+    ((inputs+=Input) | (outputs+=Output) | (locals+=Local))*
     rootNode=BehaviorTreeNode?
     '}'                                            
+;
+
+Local:
+    (attributes+=Attribute)* pure?='pure'? 'local' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
 ;
 
 BehaviorTreeNode:
@@ -135,8 +139,9 @@ BehaviorTreeNode:
 
 Task:
     {Task}
-//    (attributes+=Attribute)*
-    ('task'|condition?='condition')
+    (attributes+=Attribute)*
+    ('task' | condition?='condition')
+    (name=ID)?
     (label=STRING)?
     (
         (taskSources+=VarRef (',' taskSources+=VarRef)*)?
@@ -161,16 +166,10 @@ Task:
     )
 ;
 
-//    (attributes+=Attribute)* mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
-
-Local:
-    {Local}                 // delete this
-    (attributes+=Attribute)* mutable?='mutable'? 'local' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
-;
-
 Sequence:
     {Sequence}
     'sequence'
+    (name=ID)?
     (label=STRING)?
     '{'
         locals+=Local*
@@ -181,6 +180,7 @@ Sequence:
 Fallback:
     {Fallback}
     'fallback'
+    (name=ID)?
     (label=STRING)?
     '{'
         locals+=Local*
@@ -191,6 +191,7 @@ Fallback:
 Parallel:
     {Parallel}
     'parallel'
+    (name=ID)?
     (label=STRING)?
     (M=INT)?
     '{'
@@ -236,13 +237,19 @@ SubTreeBinding:
  */
  StateVar:
     (attributes+=Attribute)*
-    (reset?='reset')? 'state' name=ID (
-        (':' (type=Type))? 
-        ((parens+='(' (init+=Expression (','  init+=Expression)*)? parens+=')')
-            | (braces+='{' (init+=Expression (','  init+=Expression)*)? braces+='}')
-        )?
-    ) ';'?
+    (reset?='reset')? 'state' name=ID
+    (':' type=Type)?
+    init=Initializer?
+    ';'?
 ;
+
+// An initializer expression. Used in state vars and parameters.
+Initializer:
+      parens?='(' (exprs+=Expression (','  exprs+=Expression)* (trailingComma?=',')?)? ')'
+    | braces?='{' (exprs+=Expression (','  exprs+=Expression)* (trailingComma?=',')?)? '}'
+//    | assign?='=' exprs+=Expression // todo later
+;
+
 
 Method:
     const?='const'? 'method' name=ID
@@ -257,11 +264,10 @@ MethodArgument:
 ;
 
 Input:
-    (attributes+=Attribute)* mutable?='mutable'? (local=Boolean)? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
-    ;
+    (attributes+=Attribute)* pure?='pure'? mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
 
 Output:
-    (attributes+=Attribute)* (local=Boolean)? 'output' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
+    (attributes+=Attribute)* pure?='pure'? 'output' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
 
 // Timing specification for a timer: (offset, period)
 // Can be empty, which means (0,0) = (NOW, ONCE).
@@ -269,10 +275,6 @@ Output:
 // The latter means fire with period 1000, offset 100.
 Timer:
    (attributes+=Attribute)* 'timer' name=ID ('(' offset=Expression (',' period=Expression)? ')')? ';'?;
-
-Boolean:
-    TRUE | FALSE
-;
 
 Mode:
     {Mode} (initial?='initial')? 'mode' (name=ID)?
@@ -327,6 +329,7 @@ Preamble:
     (visibility=Visibility)? 'preamble' code=Code;
 
 Instantiation:
+    (attributes+=Attribute)*
     name=ID '=' 'new' (widthSpec=WidthSpec)?
     reactorClass=[ReactorDecl] ('<' typeParms+=TypeParm (',' typeParms+=TypeParm)* '>')? '(' 
     (parameters+=Assignment (',' parameters+=Assignment)*)? 
@@ -353,14 +356,7 @@ Attribute:
 ;
 
 AttrParm:
-    (name=ID '=')? value=AttrParmValue;
-
-AttrParmValue:
-    str=STRING
-    | int=SignedInt
-    | bool=Boolean
-    | float=SignedFloat
-;
+    (name=ID '=')? value=Literal;
 
 /////////// For target parameters
 
@@ -374,7 +370,7 @@ Array: // todo allow empty array in grammar, replace with validator error
     '[' elements+=Element (',' (elements+=Element))* ','? ']';
 
 Element:
-    keyvalue=KeyValuePairs 
+    keyvalue=KeyValuePairs
     | array=Array
     | literal=Literal 
     | (time=INT unit=TimeUnit)
@@ -386,7 +382,7 @@ TypedVariable:
 ;
 
 Variable:
-    TypedVariable | Timer | Mode | Local; // added | Local
+    TypedVariable | Timer | Mode | Local;
 
 VarRef:
     variable=[Variable] | container=[Instantiation] '.' variable=[Variable]
@@ -396,29 +392,32 @@ VarRefOrModeTransition returns VarRef:
     VarRef | transition=ModeTransition '(' variable=[Mode] ')';
 
 Assignment:
-    (lhs=[Parameter] (
-        (equals='=' rhs+=Expression)
-        | ((equals='=')? (
-            parens+='(' (rhs+=Expression (',' rhs+=Expression)*)? parens+=')'
-            | braces+='{' (rhs+=Expression (',' rhs+=Expression)*)? braces+='}'))
-    ));
+    lhs=[Parameter]
+    (equals='=')? rhs=AssignmentInitializer
+;
+
+// TODO Only allow = based parameter assignment
+AssignmentInitializer returns Initializer:
+      exprs+=Expression
+    | parens?='(' (exprs+=Expression (','  exprs+=Expression)* (trailingComma?=',')?)? ')'
+    | braces?='{' (exprs+=Expression (','  exprs+=Expression)* (trailingComma?=',')?)? '}'
+;
+
 
 /**
  * Parameter declaration with optional type and mandatory initialization.
  */
 Parameter:
     (attributes+=Attribute)*
-    name=ID (':' (type=Type))?
-    ((parens+='(' (init+=Expression (','  init+=Expression)*)? parens+=')')
-        | (braces+='{' (init+=Expression (','  init+=Expression)*)? braces+='}')
-    )?
+    name=ID (':' type=Type)?
+    init=Initializer?
 ;
 
 Expression:
-    {Literal} literal = Literal
+      {Literal} literal=Literal
     | Time
     | ParameterReference
-    | Code
+    | {CodeExpr} code=Code
 ;
 
 ParameterReference:
@@ -429,8 +428,10 @@ Time:
     (interval=INT unit=TimeUnit)
 ;
 
+// This rule tells Xtext to create a common super class for these model elements 
+// and has no role in the grammar itself.
 Port:
-    Input | Output;
+    Input | Output | Local;
     
 // A type is in the target language, hence either an ID or target code.
 Type:
@@ -440,11 +441,11 @@ Type:
 ;
 
 ArraySpec:
-    ofVariableLength?='[]' | '[' length=INT ']';
-    
+    '[' ( ofVariableLength?=']' | length=INT ']' );
+
 WidthSpec:
-    ofVariableLength?='[]' | '[' (terms+=WidthTerm) ('+' terms+=WidthTerm)* ']';
-    
+    '[' ( ofVariableLength?=']' | (terms+=WidthTerm) ('+' terms+=WidthTerm)* ']' );
+
 WidthTerm:
     width=INT
     | parameter=[Parameter]
@@ -480,7 +481,12 @@ SignedInt:
 ;
 
 Literal:
-    STRING | CHAR_LIT | SignedFloat | SignedInt | Boolean;
+    STRING | CHAR_LIT | SignedFloat | SignedInt | Boolean
+;
+
+Boolean:
+    TRUE | FALSE
+;
 
 /////////// Elementary components
 
@@ -610,7 +616,7 @@ Token:
     // Braces
     '(' | ')' | '{' | '}' |
     // Brackets
-    '[' | ']' | '<' | '>' | '[]' |
+    '[' | ']' | '<' | '>' |
     // Punctuation
     ':' | ';' | ',' | '.' | '::' |
     // Slashes

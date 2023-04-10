@@ -25,13 +25,32 @@
 package org.lflang.generator.cpp
 
 import org.lflang.inferredType
+import org.lflang.isBank
 import org.lflang.isMultiport
-import org.lflang.lf.Input
-import org.lflang.lf.Output
-import org.lflang.lf.Port
-import org.lflang.lf.Reactor
+import org.lflang.joinWithLn
+import org.lflang.lf.*
 
 class CppPortGenerator(private val reactor: Reactor) {
+
+    companion object {
+        private val VarRef.isMultiport get() = (variable as? Port)?.isMultiport == true
+        private val VarRef.isInBank get() = container?.isBank == true
+
+        /**
+         * Return the C++ type of a port reference.
+         *
+         * We cannot easily infer this type directly, because it might be used within a generic reactor but the reference is
+         * likely used outside of it. Instead of implementing complex logic for finding the actual type, we return a decltype
+         * statement and let the C++ compiler do the job.
+         */
+        val VarRef.dataType: String
+            get() = when {
+                isInBank && isMultiport  -> "std::remove_reference<decltype(${container.name}[0]->${variable.name}[0])>::type::value_type"
+                isInBank && !isMultiport -> "std::remove_reference<decltype(${container.name}[0]->${variable.name})>::type::value_type"
+                !isInBank && isMultiport -> "std::remove_reference<decltype($name[0])>::type::value_type"
+                else                     -> "std::remove_reference<decltype($name)>::type::value_type"
+            }
+    }
 
     private fun generateDeclaration(port: Port): String = with(port) {
         return if (isMultiport) {
@@ -44,6 +63,23 @@ class CppPortGenerator(private val reactor: Reactor) {
 
     /** Get the C++ type for the receiving port. */
     val Port.cppType: String
+        get() {
+            val portType = when (this) {
+                is Input  -> "reactor::Input"
+                is Output -> "reactor::Output"
+                else      -> throw AssertionError()
+            }
+
+            val dataType = inferredType.cppType
+            return if (isMultiport) {
+                "reactor::ModifableMultiport<$portType<$dataType>>"
+            } else {
+                "$portType<$dataType>"
+            }
+        }
+
+    /** Get the C++ interface type for the receiving port. */
+    val Port.cppInterfaceType: String
         get() {
             val portType = when (this) {
                 is Input  -> "reactor::Input"
@@ -66,14 +102,14 @@ class CppPortGenerator(private val reactor: Reactor) {
             ${name}.reserve($width);
             for (size_t __lf_idx = 0; __lf_idx < $width; __lf_idx++) {
               std::string __lf_port_name = "${name}_" + std::to_string(__lf_idx);
-              ${name}.emplace_back(__lf_port_name, this, (reactor::BaseMultiport*)&${name}, __lf_idx);
+              ${name}.emplace_back(__lf_port_name, this);
             }
         """.trimIndent()
     }
 
     fun generateConstructorInitializers() =
-        reactor.inputs.filter { it.isMultiport }.joinToString("\n") { generateConstructorInitializer(it) } +
-                reactor.outputs.filter { it.isMultiport }.joinToString("\n") { generateConstructorInitializer(it) }
+        reactor.inputs.filter { it.isMultiport }.joinWithLn { generateConstructorInitializer(it) } +
+                reactor.outputs.filter { it.isMultiport }.joinWithLn { generateConstructorInitializer(it) }
 
     fun generateDeclarations() =
         reactor.inputs.joinToString("\n", "// input ports\n", postfix = "\n") { generateDeclaration(it) } +
