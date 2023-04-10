@@ -2459,6 +2459,18 @@ public class LinguaFrancaValidationTest {
                 + "Reset and history transitions have different effects on this target mode. "
                 + "Currently, a reset type is implicitly assumed.");
     }
+    
+    @Test
+    public void testPureTypePort() throws Exception {
+        String testCase = """
+            target C;
+            reactor A {
+                pure input I:int
+            }
+        """;
+        validator.assertWarning(parseWithoutError(testCase), LfPackage.eINSTANCE.getInput(), null,
+                "A pure port cannot have type.");
+    }
 
 }
 

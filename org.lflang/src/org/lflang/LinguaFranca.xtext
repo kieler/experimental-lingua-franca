@@ -156,10 +156,10 @@ MethodArgument:
 ;
 
 Input:
-    (attributes+=Attribute)* mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
+    (attributes+=Attribute)* pure?='pure'? mutable?='mutable'? 'input' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
 
 Output:
-    (attributes+=Attribute)* 'output' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
+    (attributes+=Attribute)* pure?='pure'? 'output' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?;
 
 // Timing specification for a timer: (offset, period)
 // Can be empty, which means (0,0) = (NOW, ONCE).
@@ -320,6 +320,8 @@ Time:
     (interval=INT unit=TimeUnit)
 ;
 
+// This rule tells Xtext to create a common super class for these model elements 
+// and has no role in the grammar itself.
 Port:
     Input | Output;
     

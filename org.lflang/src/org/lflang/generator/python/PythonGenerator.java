@@ -576,6 +576,14 @@ public class PythonGenerator extends CGenerator {
                            dest + ".set(" + source + ".value)\n"
         );
     }
+    
+    @Override
+    protected String getPurePortMergeBody(String dest) {
+        return String.join("\n",
+            "\n# Generated merging reaction for connections targeting a pure port.",
+            dest + ".set_present()"
+        );
+    }
 
     @Override
     protected void setUpGeneralParameters() {

@@ -28,9 +28,6 @@ package org.lflang.validation;
 
 import static org.lflang.ASTUtils.inferPortWidth;
 import static org.lflang.ASTUtils.isGeneric;
-import static org.lflang.ASTUtils.isInteger;
-import static org.lflang.ASTUtils.isOfTimeType;
-import static org.lflang.ASTUtils.isZero;
 import static org.lflang.ASTUtils.toDefinition;
 import static org.lflang.ASTUtils.toOriginalText;
 
@@ -71,7 +68,6 @@ import org.lflang.lf.Assignment;
 import org.lflang.lf.Attribute;
 import org.lflang.lf.BuiltinTrigger;
 import org.lflang.lf.BuiltinTriggerRef;
-import org.lflang.lf.CodeExpr;
 import org.lflang.lf.Connection;
 import org.lflang.lf.Deadline;
 import org.lflang.lf.Expression;
@@ -259,6 +255,19 @@ public class LFValidator extends BaseLFValidator {
                 }
             }
         }
+        
+        // Check ports match pure type
+        if (connection.getLeftPorts().stream().filter(
+                ref -> ref.getVariable() instanceof Port
+            ).anyMatch(
+                ref -> ((Port)ref.getVariable()).isPure()
+            ) ^ connection.getRightPorts().stream().filter(
+                ref -> ref.getVariable() instanceof Port
+            ).anyMatch(
+                ref -> ((Port)ref.getVariable()).isPure()
+            )) {
+                error("Cannot connect pure ports with non-pure ports.", Literals.CONNECTION__RIGHT_PORTS);
+        }
 
         // Check whether the total width of the left side of the connection
         // matches the total width of the right side. This cannot be determined
@@ -313,6 +322,9 @@ public class LFValidator extends BaseLFValidator {
                 for (VarRef rightPort : connection.getRightPorts()) {
                     if (rightPort.getVariable().equals(effect.getVariable()) && // Refers to the same variable
                         rightPort.getContainer() == effect.getContainer() && // Refers to the same instance
+                        ( !(rightPort.getVariable() instanceof Port) || 
+                          !((Port) rightPort.getVariable()).isPure()
+                        ) && // In not pure port
                         (   reaction.eContainer() instanceof Reactor || // Either is not part of a mode
                             connection.eContainer() instanceof Reactor ||
                             connection.eContainer() == reaction.eContainer() // Or they are in the same mode
@@ -333,6 +345,9 @@ public class LFValidator extends BaseLFValidator {
                     for (VarRef thatRightPort : c.getRightPorts()) {
                         if (thisRightPort.getVariable().equals(thatRightPort.getVariable()) && // Refers to the same variable
                             thisRightPort.getContainer() == thatRightPort.getContainer() && // Refers to the same instance
+                            ( !(thisRightPort.getVariable() instanceof Port) || 
+                              !((Port) thisRightPort.getVariable()).isPure()
+                            ) && // In not pure port
                             (   connection.eContainer() instanceof Reactor || // Or either of the connections in not part of a mode
                                 c.eContainer() instanceof Reactor ||
                                 connection.eContainer() == c.eContainer() // Or they are in the same mode
@@ -433,6 +448,13 @@ public class LFValidator extends BaseLFValidator {
             }
         }
     }
+    
+    @Check(CheckType.FAST)
+    public void checkPurePort(Port port) {
+        if (port.isPure() && port.getType() != null) {
+            error("A pure port cannot have type.", Literals.TYPED_VARIABLE__TYPE);
+        }
+    }
 
     @Check(CheckType.FAST)
     public void checkInput(Input input) {
@@ -441,7 +463,7 @@ public class LFValidator extends BaseLFValidator {
             error("Main reactor cannot have inputs.", Literals.VARIABLE__NAME);
         }
         checkName(input.getName(), Literals.VARIABLE__NAME);
-        if (target.requiresTypes) {
+        if (target.requiresTypes && !input.isPure()) {
             if (input.getType() == null) {
                 error("Input must have a type.", Literals.TYPED_VARIABLE__TYPE);
             }
@@ -574,7 +596,7 @@ public class LFValidator extends BaseLFValidator {
             error("Main reactor cannot have outputs.", Literals.VARIABLE__NAME);
         }
         checkName(output.getName(), Literals.VARIABLE__NAME);
-        if (this.target.requiresTypes) {
+        if (this.target.requiresTypes && !output.isPure()) {
             if (output.getType() == null) {
                 error("Output must have a type.", Literals.TYPED_VARIABLE__TYPE);
             }

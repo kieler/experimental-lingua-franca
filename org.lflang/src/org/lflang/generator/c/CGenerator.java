@@ -779,6 +779,14 @@ public class CGenerator extends GeneratorBase {
             "lf_set("+dest+", "+source+"->value);"
         );
     }
+    
+    @Override
+    protected String getPurePortMergeBody(String dest) {
+        return String.join("\n",
+            "// Generated merging reaction for connections targeting a pure port.",
+            "lf_set_present("+dest+");"
+        );
+    }
 
     /** Set the scheduler type in the target config as needed. */
     private void pickScheduler() {

@@ -1,0 +1,43 @@
+target Python {
+    timeout: 1 sec
+}
+
+reactor Source(delay(0)) {
+    pure output O
+    
+    timer t(delay, delay)
+    
+    reaction (t) -> O {=
+        O.set_present()
+    =}
+}
+
+reactor Sink {
+    pure input I
+    
+    reaction (I) {=
+        if I.is_present:
+            print("Received input at ", lf.time.logical_elapsed())
+    =}
+}
+
+reactor Forward {
+    pure input I
+    pure output O
+    
+    reaction (I) -> O {=
+        if I.is_present:
+            O.set_present()
+    =}
+}
+
+main reactor {
+    a = new Source(delay = 250 msec)
+    b = new Source(delay = 333 msec)
+    c = new Forward()
+    d = new Sink()
+    
+    a.O -> c.I
+    b.O -> c.I
+    c.O -> d.I
+}

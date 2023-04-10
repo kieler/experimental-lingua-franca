@@ -28,11 +28,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.emf.ecore.EObject;
@@ -40,7 +41,6 @@ import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.xtext.xbase.lib.IterableExtensions;
 import org.eclipse.xtext.xbase.lib.IteratorExtensions;
-
 import org.lflang.ASTUtils;
 import org.lflang.ErrorReporter;
 import org.lflang.FileConfig;
@@ -55,14 +55,17 @@ import org.lflang.lf.Connection;
 import org.lflang.lf.Expression;
 import org.lflang.lf.Instantiation;
 import org.lflang.lf.LfFactory;
+import org.lflang.lf.LfPackage;
 import org.lflang.lf.Mode;
-
+import org.lflang.lf.Port;
 import org.lflang.lf.Reaction;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Time;
+import org.lflang.lf.VarRef;
 import org.lflang.validation.AbstractLFValidator;
 
 import com.google.common.base.Objects;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterables;
 
 /**
@@ -288,7 +291,11 @@ public abstract class GeneratorBase extends AbstractLFValidator {
         for (AstTransformation transformation : astTransformations) {
             transformation.applyTransformation(reactors);
         }
-
+        
+        // Transform connections that require merging to feed pure port.
+        // This should be done before creating the instantiation graph
+        transformPurePortMerge();
+        
         // Transform connections that reside in mutually exclusive modes and are otherwise conflicting
         // This should be done before creating the instantiation graph
         transformConflictingConnectionsInModalReactors();
@@ -461,6 +468,85 @@ public abstract class GeneratorBase extends AbstractLFValidator {
             errorReporter.reportError("The currently selected code generation or " +
                                       "target configuration does not support modal reactors!");
         }
+    }
+    
+    /**
+     * Finds connections leading to pure ports from multiple sources and adds a reaction that will merge them by OR.
+     */
+    private void transformPurePortMerge() {
+        for (LFResource resource : resources) {
+            for (Reactor reactor : ASTUtils.getAllReactors(resource.eResource)) { // All reactors
+                var factory = LfFactory.eINSTANCE;
+                List<Connection> connections = ASTUtils.<Connection>collectElements(reactor, 
+                        LfPackage.eINSTANCE.getReactor_Connections(), false, true);
+                List<Connection> pureWriters = connections.stream()
+                        .filter(c -> c.getRightPorts().stream()
+                                .anyMatch(p -> p.getVariable() instanceof Port && ((Port) p.getVariable()).isPure()))
+                        .collect(Collectors.toList());
+                if (!pureWriters.isEmpty()) {
+                    var pureWriterMap = HashMultimap.<VarRef, Connection>create();
+                    for (var c : pureWriters) {
+                        // Check for supported connection
+                        if (c.isPhysical() || c.getDelay() != null || c.isIterated() || c.getLeftPorts().size() > 1 || c.getRightPorts().size() > 1) {
+                            errorReporter.reportError(c, "Cannot handle connections to pure ports that are not defined as simple one-to-one connections.");
+                        } else {
+                            var destRef = c.getRightPorts().get(0);
+                            // Find key
+                            var key = pureWriterMap.keys().stream()
+                                    .filter(k -> k.getContainer() == destRef.getContainer() && k.getVariable() == destRef.getVariable())
+                                    .findFirst();
+                            if (key.isPresent()) {
+                                pureWriterMap.put(key.get(), c);
+                            } else {
+                                pureWriterMap.put(destRef, c);
+                            }
+                        }
+                    }
+                    // Introduce merging reaction
+                    for (var destRef : pureWriterMap.keys()) {
+                        var port = (Port) destRef.getVariable();
+                        if (port.getWidthSpec() != null) {
+                            errorReporter.reportError(port, "Pure multiports are not yet supported.");
+                        }
+                        
+                        Set<Connection> writers = pureWriterMap.get(destRef);
+                        if (writers.size() > 1 ||
+                            ASTUtils.allReactions(reactor).stream().anyMatch(
+                                r -> r.getEffects().stream().anyMatch(e -> 
+                                    e.getContainer() == destRef.getContainer() && e.getVariable() == destRef.getVariable()))
+                            ) { // Only for multiple writers or in mix with reactions
+                            // Introduce merging reaction
+                            var reaction = factory.createReaction();
+                            reactor.getReactions().add(reaction);
+                            
+                            // interface
+                            writers.stream().map(c -> EcoreUtil.copy(c.getLeftPorts().get(0))).forEachOrdered(reaction.getTriggers()::add);
+                            reaction.getEffects().add(EcoreUtil.copy(destRef));
+
+                            var code = factory.createCode();
+                            var dest = (destRef.getContainer() != null ?
+                                    destRef.getContainer().getName() + "." : "") + destRef.getVariable().getName();
+                            code.setBody(getPurePortMergeBody(dest));
+                            reaction.setCode(code);
+
+                            EcoreUtil.removeAll(writers);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /**
+     * Return target code for forwarding reactions in pure ports with multiple writers.
+     *
+     * This method needs to be overridden in target specific code generators that
+     * support pure ports.
+     */
+    protected String getPurePortMergeBody(String dest) {
+        errorReporter.reportError("The currently selected code generation " +
+                                  "is missing an implementation for pure " +
+                                  "port merging.");
+        return "PURE PORTS NOT SUPPORTED";
     }
 
     /**

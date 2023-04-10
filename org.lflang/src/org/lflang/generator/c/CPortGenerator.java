@@ -76,7 +76,9 @@ public class CPortGenerator {
                 "int destination_channel;",  // From lf_port_base_t
                 "int num_destinations;"      // From lf_port_base_t
         ));
-        code.pr(valueDeclaration(port, target, errorReporter, types));
+        if (!port.isPure()) {
+            code.pr(valueDeclaration(port, target, errorReporter, types));
+        }
         code.pr(federatedExtension.toString());
         code.unindent();
         code.pr("} "+variableStructType(port, decl)+";");

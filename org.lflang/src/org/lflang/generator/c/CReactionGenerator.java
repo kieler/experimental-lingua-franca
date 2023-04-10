@@ -637,7 +637,7 @@ public class CReactionGenerator {
         Output output = (Output) effect.getVariable();
         String outputName = output.getName();
         String outputWidth = generateWidthVariable(outputName);
-        if (output.getType() == null && requiresTypes) {
+        if (output.getType() == null && !output.isPure() && requiresTypes) {
             errorReporter.reportError(output, "Output is required to have a type: " + outputName);
             return "";
         } else {
@@ -873,11 +873,14 @@ public class CReactionGenerator {
                 "self->_lf__"+varName+".physical_time_of_arrival = NEVER;"));
         }
         if (variable instanceof Input) {
-            var rootType = CUtil.rootType(types.getTargetType((Input) variable));
-            // Since the self struct is allocated using calloc, there is no need to set falsy fields.
-            // If the input type is 'void', we need to avoid generating the code
-            // 'sizeof(void)', which some compilers reject.
-            var size = (rootType.equals("void")) ? "0" : "sizeof("+rootType+")";
+            var size = "0";
+            if (!((Input) variable).isPure()) {
+                var rootType = CUtil.rootType(types.getTargetType((Input) variable));
+                // Since the self struct is allocated using calloc, there is no need to set falsy fields.
+                // If the input type is 'void', we need to avoid generating the code
+                // 'sizeof(void)', which some compilers reject.
+                size = rootType.equals("void") ? "0" : "sizeof("+rootType+")";
+            }
 
             constructorCode.pr("self->_lf__"+varName+".tmplt.type.element_size = "+size+";");
             body.pr(
