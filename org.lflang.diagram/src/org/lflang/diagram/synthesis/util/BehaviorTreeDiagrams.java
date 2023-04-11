@@ -42,7 +42,8 @@ import org.eclipse.elk.core.options.EdgeRouting;
 import org.eclipse.elk.core.options.SizeConstraint;
 import org.eclipse.xtext.xbase.lib.Extension;
 import org.lflang.AttributeUtils;
-import org.lflang.behaviortrees.BehaviorTreeTransformation.NodeType;
+import org.lflang.behaviortrees.BehaviorTrees;
+import org.lflang.behaviortrees.BehaviorTrees.NodeType;
 import org.lflang.diagram.synthesis.AbstractSynthesisExtensions;
 import org.lflang.diagram.synthesis.LinguaFrancaSynthesis;
 import org.lflang.diagram.synthesis.styles.LinguaFrancaStyleExtensions;
@@ -71,7 +72,7 @@ import de.cau.cs.kieler.klighd.syntheses.DiagramSyntheses;
  * @author{Alexander Schulz-Rosengarten <als@informatik.uni-kiel.de>}
  */
 @ViewSynthesisShared
-public class BehaviorTrees extends AbstractSynthesisExtensions {
+public class BehaviorTreeDiagrams extends AbstractSynthesisExtensions {
     
     // Related synthesis option
     public static final SynthesisOption BT_CATEGORY = 
@@ -166,7 +167,7 @@ public class BehaviorTrees extends AbstractSynthesisExtensions {
 
     private NodeType getBTNodeType(Reactor reactor) {
         try {
-            var type = AttributeUtils.findAttributeByName(reactor, "btnode");
+            var type = AttributeUtils.findAttributeByName(reactor, BehaviorTrees.TYPE_ANNOTATION_NAME);
             var typeName = AttributeUtils.getFirstArgumentValue(type);
             return NodeType.valueOf(typeName.toUpperCase());
         } catch (Exception e) {

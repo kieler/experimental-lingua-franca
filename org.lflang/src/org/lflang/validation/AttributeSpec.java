@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.lflang.ASTUtils;
+import org.lflang.behaviortrees.BehaviorTrees;
 import org.lflang.lf.AttrParm;
 import org.lflang.lf.Attribute;
 import org.lflang.lf.LfPackage.Literals;
@@ -221,7 +222,7 @@ public class AttributeSpec {
         ));
 
         // @btnode("value")
-        ATTRIBUTE_SPECS_BY_NAME.put("btnode", new AttributeSpec(
+        ATTRIBUTE_SPECS_BY_NAME.put(BehaviorTrees.TYPE_ANNOTATION_NAME, new AttributeSpec(
             List.of(new AttrParamSpec(VALUE_ATTR, AttrParamType.STRING, false))
         ));
 

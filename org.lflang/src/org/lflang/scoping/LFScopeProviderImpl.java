@@ -379,9 +379,9 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
             }
         } else if (variable.eContainer() instanceof Task) {
             var task = (Task) variable.eContainer();
-            if (task.getTaskSources().contains(variable)) {
+            if (task.getSources().contains(variable)) {
                 return RefType.SOURCE;
-            } else if (task.getTaskEffects().contains(variable)) {
+            } else if (task.getEffects().contains(variable)) {
                 return RefType.EFFECT;
             }
         }

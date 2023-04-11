@@ -364,7 +364,7 @@ public abstract class GeneratorBase extends AbstractLFValidator {
      * For each involved resource, replace transform behavior trees into reactions.
      */
     private void transformBehaviorTrees(Resource r) {
-        BehaviorTreeTransformation.transform((Model) r.getContents().get(0));
+        BehaviorTreeTransformation.transform((Model) r.getContents().get(0), targetConfig.target);
     }
 
     /**

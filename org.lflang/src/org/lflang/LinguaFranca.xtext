@@ -134,20 +134,25 @@ Local:
 ;
 
 BehaviorTreeNode:
-    Task | Sequence | Fallback | Parallel | SubTree
+    Task | SubTree | BehaviorTreeCompoundNode
+;
+
+BehaviorTreeCompoundNode:
+    Sequence | Fallback | Parallel
 ;
 
 Task:
     {Task}
     (attributes+=Attribute)*
     ('task' | condition?='condition')
-    (name=ID)?
-    (label=STRING)?
     (
-        (taskSources+=VarRef (',' taskSources+=VarRef)*)?
-        ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
+        (label=STRING)?
+        (sources+=VarRef (',' sources+=VarRef)*)?
+        ('->' effects+=VarRef (',' effects+=VarRef)*)?
         code=Code
     |
+        (name=ID)?
+        (label=STRING)?
         '{'
             ( (preambles+=Preamble)
             | (stateVars+=StateVar)
@@ -159,8 +164,8 @@ Task:
 //            | (reactions+=Reaction) // triggering unclear
             )*
             'reaction'
-            (taskSources+=VarRef (',' taskSources+=VarRef)*)?
-            ('->' taskEffects+=VarRef (',' taskEffects+=VarRef)*)?
+            (sources+=VarRef (',' sources+=VarRef)*)?
+            ('->' effects+=VarRef (',' effects+=VarRef)*)?
             code=Code
         '}'
     )
@@ -206,6 +211,7 @@ SubTree:
     '(' 
     (parameters+=Assignment (',' parameters+=Assignment)*)? 
     ')'
+    (label=STRING)?
     (
         '{'
             bindings+=SubTreeBinding*

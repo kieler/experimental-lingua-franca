@@ -38,9 +38,6 @@ import java.util.stream.Stream;
 
 import javax.inject.Inject;
 
-import org.eclipse.elk.alg.layered.options.EdgeStraighteningStrategy;
-import org.eclipse.elk.alg.layered.options.FixedAlignment;
-import org.eclipse.elk.alg.layered.options.GreedySwitchType;
 import org.eclipse.elk.alg.layered.options.LayerConstraint;
 import org.eclipse.elk.alg.layered.options.LayeredOptions;
 import org.eclipse.elk.alg.layered.options.NodePlacementStrategy;
@@ -70,6 +67,7 @@ import org.lflang.AttributeUtils;
 import org.lflang.InferredType;
 import org.lflang.ast.FormattingUtils;
 import org.lflang.behaviortrees.BehaviorTreeTransformation;
+import org.lflang.behaviortrees.BehaviorTrees;
 import org.lflang.diagram.synthesis.action.CollapseAllReactorsAction;
 import org.lflang.diagram.synthesis.action.ExpandAllReactorsAction;
 import org.lflang.diagram.synthesis.action.FilterCycleAction;
@@ -79,7 +77,7 @@ import org.lflang.diagram.synthesis.postprocessor.ReactionPortAdjustment;
 import org.lflang.diagram.synthesis.styles.LinguaFrancaShapeExtensions;
 import org.lflang.diagram.synthesis.styles.LinguaFrancaStyleExtensions;
 import org.lflang.diagram.synthesis.styles.ReactorFigureComponents;
-import org.lflang.diagram.synthesis.util.BehaviorTrees;
+import org.lflang.diagram.synthesis.util.BehaviorTreeDiagrams;
 import org.lflang.diagram.synthesis.util.CycleVisualization;
 import org.lflang.diagram.synthesis.util.InterfaceDependenciesVisualization;
 import org.lflang.diagram.synthesis.util.LayoutPostProcessing;
@@ -160,7 +158,7 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
     @Inject @Extension private FilterCycleAction _filterCycleAction;
     @Inject @Extension private ReactorIcons _reactorIcons;
     @Inject @Extension private ModeDiagrams _modeDiagrams;
-    @Inject @Extension private BehaviorTrees _btDiagrams;
+    @Inject @Extension private BehaviorTreeDiagrams _btDiagrams;
     @Inject @Extension private LayoutPostProcessing _layoutPostProcessing;
     
     // -------------------------------------------------------------------------
@@ -232,9 +230,9 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
             ModeDiagrams.MODES_CATEGORY,
             ModeDiagrams.SHOW_TRANSITION_LABELS,
             ModeDiagrams.INITIALLY_COLLAPSE_MODES,
-            BehaviorTrees.BT_CATEGORY,
-            BehaviorTrees.SHOW_BT,
-            BehaviorTrees.BT_DIRECTION,
+            BehaviorTreeDiagrams.BT_CATEGORY,
+            BehaviorTreeDiagrams.SHOW_BT,
+            BehaviorTreeDiagrams.BT_DIRECTION,
             SHOW_USER_LABELS,
             SHOW_HYPERLINKS,
             //LinguaFrancaSynthesisInterfaceDependencies.SHOW_INTERFACE_DEPENDENCIES,
@@ -273,7 +271,7 @@ public class LinguaFrancaSynthesis extends AbstractDiagramSynthesis<Model> {
         // Transformation before synthesis
         // FIXME Model copy without source file
         model = EcoreUtil.copy(model);
-        BehaviorTreeTransformation.transform(model);
+        BehaviorTreeTransformation.transform(model, null);
 
         try {
             // Find main
