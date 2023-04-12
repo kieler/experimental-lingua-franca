@@ -25,7 +25,7 @@
  ***************/
 package org.lflang.behaviortrees;
 
-import java.util.ArrayList;
+import java.util.List;
 
 import org.lflang.lf.Parallel;
 import org.lflang.lf.Reactor;
@@ -45,7 +45,8 @@ interface CodeGenerator {
     String getRunningInference();
 
     /**
-     * Computation for the result of a parallel node based on its children and M.
+     * Computation for the result of a parallel node based on its children and
+     * M.
      * 
      * @param parallel
      * @param reactor
@@ -53,6 +54,17 @@ interface CodeGenerator {
      * @return the code
      */
     String getParallelCalculation(Parallel parallel, Reactor reactor,
-            ArrayList<TransformedNode> children);
+            List<TransformedNode> children);
+
+    /**
+     * Sequential merge.
+     * 
+     * @param name
+     * @param writerNames
+     * @param object
+     * @return
+     */
+    String getSequentialMerge(String portName, List<String> sourceInstanceName,
+            List<String> targetInstanceName);
 
 }

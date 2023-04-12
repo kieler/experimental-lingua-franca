@@ -25,7 +25,7 @@
  ***************/
 package org.lflang.behaviortrees;
 
-import java.util.ArrayList;
+import java.util.List;
 
 import org.lflang.lf.Parallel;
 import org.lflang.lf.Reactor;
@@ -50,7 +50,17 @@ class EmptyCodeGenerator implements CodeGenerator {
      */
     @Override
     public String getParallelCalculation(Parallel parallel, Reactor reactor,
-            ArrayList<TransformedNode> children) {
+            List<TransformedNode> children) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String getSequentialMerge(String portName,
+            List<String> sourceInstanceName, List<String> targetInstanceName) {
         return "";
     }
 

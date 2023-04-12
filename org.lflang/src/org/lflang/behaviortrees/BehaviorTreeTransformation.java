@@ -30,20 +30,22 @@ import static org.lflang.behaviortrees.BehaviorTrees.RUNNING;
 import static org.lflang.behaviortrees.BehaviorTrees.START;
 import static org.lflang.behaviortrees.BehaviorTrees.SUCCESS;
 import static org.lflang.behaviortrees.BehaviorTrees.TYPE_ANNOTATION_NAME;
+import static org.lflang.behaviortrees.TransformationUtil.connect;
+import static org.lflang.behaviortrees.TransformationUtil.createRef;
+import static org.lflang.behaviortrees.TransformationUtil.getTypeOfNode;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.stream.Stream;
 
 import org.eclipse.emf.ecore.util.EcoreUtil;
+import org.lflang.ASTUtils;
 import org.lflang.Target;
 import org.lflang.behaviortrees.BehaviorTrees.NodeType;
 import org.lflang.lf.BehaviorTree;
 import org.lflang.lf.BehaviorTreeCompoundNode;
 import org.lflang.lf.BehaviorTreeNode;
-import org.lflang.lf.Connection;
 import org.lflang.lf.Fallback;
 import org.lflang.lf.Input;
 import org.lflang.lf.Instantiation;
@@ -65,7 +67,7 @@ import com.google.common.collect.Lists;
 /**
  * BehaviorTree AST transformation.
  * 
- * @author{Alexander Schulz-Rosengarten <als@informatik.uni-kiel.de>}
+ * @author Alexander Schulz-Rosengarten
  */
 public class BehaviorTreeTransformation {
 
@@ -126,13 +128,17 @@ public class BehaviorTreeTransformation {
                 default:
                     throw new UnsupportedOperationException("Behavior tree do not yet support target language " + target.name());
             }
+        } else {
+            codeGenerator = new EmptyCodeGenerator();
         }
+        connector = new DataConnector(codeGenerator);
     }
 
+    private final CodeGenerator codeGenerator;
+    private final DataConnector connector;
     private int nodeNameCounter = 0;
     private HashMap<BehaviorTree, Reactor> bTreeCache = new HashMap<>();
     private List<Reactor> newReactors = new ArrayList<>();
-    private CodeGenerator codeGenerator = new EmptyCodeGenerator();
 
     private void transformAll(Model lfModel) {
         var transformed = new HashMap<BehaviorTree, Reactor>();
@@ -166,6 +172,10 @@ public class BehaviorTreeTransformation {
         lfModel.getBtrees().clear();
         // Add new reactors to model
         lfModel.getReactors().addAll(newReactors);
+        // Add Pre reactor if necessary
+        if (connector.usesPreReactor()) {
+            lfModel.getReactors().add(connector.getPreReactorDefintion());
+        }
     }
     
     private Reactor transformBTree(BehaviorTree bt) {
@@ -193,6 +203,9 @@ public class BehaviorTreeTransformation {
         
         // Transform BT root node
         if (bt.getRootNode() != null) {
+            connector.analyze(bt);
+            
+            // Start recursive transformation
             var child = transformNode(bt.getRootNode(), "root");
             var childReactor = child.reactor;
             var childInstance = child.instance;
@@ -206,7 +219,7 @@ public class BehaviorTreeTransformation {
             ));
     
             // Forward in and outputs port to root node
-            DataConnectionUtil.connectRootIO(bt, reactor, child);
+            connector.connectRootIO(bt, reactor, child);
         }
         
         if (INFER_RUNNING) {
@@ -247,6 +260,8 @@ public class BehaviorTreeTransformation {
             addConrolflowInterface(reactor);
             
             if (node instanceof BehaviorTreeCompoundNode cnode) {
+                var result = new TransformedNode(node, reactor, instance);
+                
                 // Transform children
                 var children = new ArrayList<TransformedNode>();
                 for (int i = 0; i < cnode.getNodes().size(); i++) {
@@ -257,12 +272,12 @@ public class BehaviorTreeTransformation {
                 
                 if (!children.isEmpty()) {
                     conncetControlflow(cnode, reactor, children);
+                    
+                    result.setChildren(children);
+                    
+                    // Forward in and outputs port to root node
+                    connector.connectData(result, children);
                 }
-                
-                var result = new TransformedNode(node, reactor, instance);
-                
-                // Forward in and outputs port to root node
-                DataConnectionUtil.connectData(result, children, codeGenerator);
                 
                 return result;
             } else if (node instanceof Task) {
@@ -289,7 +304,7 @@ public class BehaviorTreeTransformation {
             attr.setAttrName("label");
             var param = LFF.createAttrParm();
             attr.getAttrParms().add(param);
-            param.setValue(subtree.getLabel());
+            param.setValue("\""+subtree.getLabel()+"\"");
             reactor.getAttributes().add(attr);
         }
         
@@ -317,6 +332,8 @@ public class BehaviorTreeTransformation {
         // - body
         if (task.getCode() != null) {
             reaction.setCode(EcoreUtil.copy(task.getCode()));
+            // The model does not reflect formatting, hence perform pre-format new code blocks similar to compilation
+            reaction.getCode().setBody(ASTUtils.toText(task.getCode()));
         }
         
         var result = new TransformedNode(task, reactor, instance);
@@ -379,74 +396,8 @@ public class BehaviorTreeTransformation {
         attr.setAttrName(TYPE_ANNOTATION_NAME);
         var param = LFF.createAttrParm();
         attr.getAttrParms().add(param);
-        param.setValue(type);
+        param.setValue("\""+type+"\"");
         reactor.getAttributes().add(attr);
-    }
-    
-    /**
-     * Create a reference to a port of a reactor. The reactor is either the parent (instance == null) or 
-     * an inner instantiation. Ports are extracted from the reactor via name matching.
-     * 
-     * @param reactor
-     * @param instance
-     * @param portName
-     * @return
-     */
-    private VarRef createRef(Reactor reactor, Instantiation instance, String portName) {
-        var ref = LFF.createVarRef();
-        var port = getPort(reactor, portName);
-
-        if (port != null) {
-            ref.setVariable(port);
-            if (instance != null) {
-                ref.setContainer(instance);
-            }
-            return ref;
-        } else {
-            return null;
-        }
-    }
-    
-    /**
-     * Finds a port in a reactor by name.
-     * 
-     * @param reactor
-     * @param portName
-     * @return
-     */
-    private Port getPort(Reactor r, String portName) {
-        var opt = Stream.concat(r.getInputs().stream(), r.getOutputs().stream())
-                .filter(p -> p.getName().equals(portName)).findFirst();
-        if (opt.isPresent()) {
-            return opt.get();
-        } else {
-            return null;
-        }
-    }
-    
-    /**
-     * Creates a connection. Both the left and reight side can be either the parent reactor (instance == null) or 
-     * an inner instantiation.
-     * 
-     * @param leftR
-     * @param leftI
-     * @param leftPortName
-     * @param rightR
-     * @param rightI
-     * @param rightPortName
-     * @return
-     */
-    private Connection connect(Reactor leftR, Instantiation leftI,
-            String leftPortName, Reactor rightR, Instantiation rightI,
-            String rightPortName) {
-        var connection = LFF.createConnection();
-        var leftVarRef = createRef(leftR, leftI, leftPortName);
-        var rightVarRef = createRef(rightR, rightI, rightPortName);
-
-        connection.getLeftPorts().add(leftVarRef);
-        connection.getRightPorts().add(rightVarRef);
-
-        return connection;
     }
     
     /**
@@ -468,7 +419,7 @@ public class BehaviorTreeTransformation {
             attr.setAttrName("label");
             var param = LFF.createAttrParm();
             attr.getAttrParms().add(param);
-            param.setValue(node.getLabel());
+            param.setValue("\""+node.getLabel()+"\"");
             reactor.getAttributes().add(attr);
         }
     }
@@ -493,27 +444,6 @@ public class BehaviorTreeTransformation {
         fail.setName(FAILURE);
         fail.setPure(true);
         reactor.getOutputs().add(fail);
-    }
-    
-    /**
-     * Determines the NodeType based on a BehaviorTreeNode instance.
-     * 
-     * @param node
-     * @return
-     */
-    private NodeType getTypeOfNode(BehaviorTreeNode node) {
-        if (node instanceof Sequence) {
-            return NodeType.SEQUENCE;
-        } else if (node instanceof Fallback) {
-            return NodeType.FALLBACK;
-        } else if (node instanceof Parallel) {
-            return NodeType.PARALLEL;
-        } else if (node instanceof Task) {
-            return ((Task) node).isCondition() ? NodeType.CONDITION : NodeType.ACTION;
-        } else if (node instanceof SubTree) {
-            return NodeType.SUBTREE;
-        }
-        return null;
     }
     
     /**
@@ -613,6 +543,7 @@ class TransformedNode {
     public final LinkedHashMap<Output, Output> outputs = new LinkedHashMap<>();
     public final LinkedHashMap<Input, Local> localsIn = new LinkedHashMap<>();
     public final LinkedHashMap<Output, Local> localsOut = new LinkedHashMap<>();
+    public final List<TransformedNode> children = new ArrayList<TransformedNode>();
 
     TransformedNode(
         BehaviorTreeNode node, 
@@ -622,7 +553,12 @@ class TransformedNode {
         this.reactor = reactor;
         this.instance = instance;
     }
-    
+
+    public void setChildren(ArrayList<TransformedNode> children) {
+        this.children.clear();
+        this.children.addAll(children);
+    }
+
     boolean isSubTree() {
         return node instanceof SubTree;
     }

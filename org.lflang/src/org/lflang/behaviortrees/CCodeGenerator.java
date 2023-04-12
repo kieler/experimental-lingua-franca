@@ -25,7 +25,7 @@
  ***************/
 package org.lflang.behaviortrees;
 
-import java.util.ArrayList;
+import java.util.List;
 
 import org.lflang.lf.Parallel;
 import org.lflang.lf.Reactor;
@@ -51,49 +51,19 @@ class CCodeGenerator implements CodeGenerator {
      */
     @Override
     public String getParallelCalculation(Parallel parallel, Reactor reactor,
-            ArrayList<TransformedNode> children) {
+            List<TransformedNode> children) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String getSequentialMerge(String portName,
+            List<String> sourceInstanceName, List<String> targetInstanceName) {
         // TODO Auto-generated method stub
         return null;
     }
     
 }
-
-//
-//private void setMergedOutputReactionForPar(Reaction reaction, int N, int M, Reactor reactor) {
-//var code = LFF.createCode();
-//String codeContent = "int successCounter = 0;\n"
-//        + "int failureCounter = 0;\n\n";
-//for (var succTrigger : reaction.getTriggers()) {
-//    var triggerVarRef = (VarRef) succTrigger;
-//    String instName = triggerVarRef.getContainer().getName();
-//    
-//    if (triggerVarRef.getVariable().getName().equals(SUCCESS)) {
-//        codeContent += "if(" + instName + ".success->is_present) {\n    "
-//                + "successCounter++;\n}\n";
-//    } else {
-//        codeContent += "if(" + instName + ".failure->is_present) {\n    "
-//                + "failureCounter++;\n}\n";
-//    }
-//    
-//}
-//codeContent += "\nif(successCounter >= " + M + ") {\n    "
-//        + "SET(success, true);\n} "
-//        + "else if (failureCounter > " + (N-M) + ") {\n    "
-//        + "SET(failure, true);\n}";
-//
-//
-//code.setBody(codeContent);
-//reaction.setCode(code);
-//reaction.getEffects().add(createRef(reactor, null, SUCCESS));
-//reaction.getEffects().add(createRef(reactor, null, FAILURE));
-//}
-//
-//private Reaction createMergedOutputReaction(Reactor reactor, String outputName) {
-//var reaction = LFF.createReaction();
-//var code = LFF.createCode();
-//code.setBody("SET(" + outputName + ", true);");
-//reaction.setCode(code);
-//reaction.getEffects().add(createRef(reactor, null, outputName));
-//
-//return reaction;
-//}

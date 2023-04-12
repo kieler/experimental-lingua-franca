@@ -169,6 +169,9 @@ public class BehaviorTreeDiagrams extends AbstractSynthesisExtensions {
         try {
             var type = AttributeUtils.findAttributeByName(reactor, BehaviorTrees.TYPE_ANNOTATION_NAME);
             var typeName = AttributeUtils.getFirstArgumentValue(type);
+            if (typeName.startsWith("\"")) {
+                typeName = typeName.substring(1, typeName.length() - 1);
+            }
             return NodeType.valueOf(typeName.toUpperCase());
         } catch (Exception e) {
             return null;

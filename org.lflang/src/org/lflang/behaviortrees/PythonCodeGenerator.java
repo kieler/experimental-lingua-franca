@@ -25,7 +25,9 @@
  ***************/
 package org.lflang.behaviortrees;
 
-import java.util.ArrayList;
+import static java.lang.String.format;
+
+import java.util.List;
 
 import org.lflang.lf.Parallel;
 import org.lflang.lf.Reactor;
@@ -51,9 +53,33 @@ class PythonCodeGenerator implements CodeGenerator {
      */
     @Override
     public String getParallelCalculation(Parallel parallel, Reactor reactor,
-            ArrayList<TransformedNode> children) {
+            List<TransformedNode> children) {
         // TODO Auto-generated method stub
         return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String getSequentialMerge(String portName,
+            List<String> sourceInstanceName, List<String> targetInstanceName) {
+        var targetPort = (targetInstanceName != null ? targetInstanceName : "") + portName;
+        var code = new StringBuilder();
+        
+        if (!sourceInstanceName.isEmpty()) {
+            // Test in reverse for overriding
+            for (int i = sourceInstanceName.size() - 1; i >= 0; i--) {
+                if (i == sourceInstanceName.size() - 1) { // first
+                    code.append(format("if %s.%s.is_present:\n", sourceInstanceName.get(i), portName));
+                } else {
+                    code.append(format("elif %s.%s.is_present:\n", sourceInstanceName.get(i), portName));
+                }
+                code.append(format("    %s.set(%s.%s.value)\n", targetPort, sourceInstanceName.get(i), portName));
+            }
+        }
+        
+        return code.toString();
     }
     
 }
