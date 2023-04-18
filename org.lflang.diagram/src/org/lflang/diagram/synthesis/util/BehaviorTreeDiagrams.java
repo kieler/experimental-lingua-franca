@@ -185,15 +185,20 @@ public class BehaviorTreeDiagrams extends AbstractSynthesisExtensions {
         //associateWith(node, reactor.getDefinition().getReactorClass());
         //_utilityExtensions.setID(node, reactor.uniqueID());
         
+        var reactorDecl = reactor.getDefinition().getReactorClass();
+        var label = AttributeUtils.getLabel(reactorDecl);
+        var name = reactorDecl.getName();
+        var text = label != null && !label.isEmpty() ? label : name;
+        
         KContainerRendering figure;
         switch(type) {
             case ACTION:
                 figure = _kRenderingExtensions.addRectangle(node);
-                addLabel(figure, reactor.getDefinition().getReactorClass().getName());
+                addLabel(figure, text);
                 break;
             case CONDITION:
                 figure = _kRenderingExtensions.addEllipse(node);
-                addLabel(figure, reactor.getDefinition().getReactorClass().getName());
+                addLabel(figure, text);
                 break;
             case FALLBACK:
                 figure = _kRenderingExtensions.addRectangle(node);
