@@ -139,7 +139,7 @@ class DataConnector {
                     node.outputs.put(portCopy, child.outputs.get(output));
                 }
                 // Register writer
-                writerMap.put(output, child);
+                writerMap.put(child.outputs.get(output), child);
             }
         }
         for (var port : writerMap.keySet()) {
@@ -153,12 +153,13 @@ class DataConnector {
             } else if (node.node instanceof Sequence || node.node instanceof Fallback) { // Can be merged sequentially
                 // Merge
                 var reaction = LFF.createReaction();
+                node.reactor.getReactions().add(reaction);
                 
                 // Interface
                 reaction.getEffects().add(createRef(node.reactor, null, port.getName()));
                 var writerNames = new ArrayList<String>();
                 for (var writer : writers) {
-                    reaction.getEffects().add(createRef(writer.reactor, writer.instance, port.getName()));
+                    reaction.getTriggers().add(createRef(writer.reactor, writer.instance, port.getName()));
                     writerNames.add(writer.instance.getName());
                 }
                 
@@ -166,7 +167,11 @@ class DataConnector {
                 code.setBody(codeGenerator.getSequentialMerge(port.getName(), writerNames, null));
                 reaction.setCode(code);
             } else {
-                // This should raise some error or create an invalid model because it causes race conditions
+                // Create normal connections. If there is only one writer, it will work. If there are multiple writers, it will cause a error in the compilation.
+                for (var writer : writers) {
+                    node.reactor.getConnections().add(
+                            connect(writer.reactor, writer.instance, port.getName(), node.reactor, null, port.getName()));
+                }
             }
         }
         

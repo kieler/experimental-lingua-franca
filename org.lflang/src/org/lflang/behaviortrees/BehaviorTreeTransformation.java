@@ -536,13 +536,21 @@ public class BehaviorTreeTransformation {
 }
 
 class TransformedNode {
+    /** The source node in the BT. */
     public final BehaviorTreeNode node;
+    /** The created reactor. */
     public final Reactor reactor;
+    /** The instantiation of the reactor in its parent.  */
     public final Instantiation instance;
+    /** Map of input ports. Key: Port in this reactor, Value: Original port in the BT. */
     public final LinkedHashMap<Input, Input> inputs = new LinkedHashMap<>();
+    /** Map of output ports. Key: Port in this reactor, Value: Original port in the BT. */
     public final LinkedHashMap<Output, Output> outputs = new LinkedHashMap<>();
+    /** Map of read local ports. Key: Port in this reactor, Value: Original local in the BT. */
     public final LinkedHashMap<Input, Local> localsIn = new LinkedHashMap<>();
+    /** Map of written local ports. Key: Port in this reactor, Value: Original local in the BT. */
     public final LinkedHashMap<Output, Local> localsOut = new LinkedHashMap<>();
+    /** List of all transformed children of this node. */
     public final List<TransformedNode> children = new ArrayList<TransformedNode>();
 
     TransformedNode(
