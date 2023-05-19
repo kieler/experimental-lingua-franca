@@ -146,7 +146,7 @@ Task:
     (attributes+=Attribute)*
     ('task' | condition?='condition')
     (
-        (label=STRING)?
+        (name=ID? label=STRING)? // The task can only have a name if a label is there, otherwise the grammar cannot distinguish it from a VarRef
         (sources+=VarRef (',' sources+=VarRef)*)?
         ('->' effects+=VarRef (',' effects+=VarRef)*)?
         code=Code
@@ -161,8 +161,9 @@ Task:
             | (actions+=Action)
             | (instantiations+=Instantiation)
             | (connections+=Connection)
-//            | (reactions+=Reaction) // triggering unclear
+            | (reactions+=Reaction)
             )*
+            
             'reaction'
             (sources+=VarRef (',' sources+=VarRef)*)?
             ('->' effects+=VarRef (',' effects+=VarRef)*)?
@@ -206,7 +207,7 @@ Parallel:
 ;
 
 SubTree:
-    'subtree' name=ID '=' 'new' // (widthSpec=WidthSpec)?
+    name=ID '=' 'new'
     behaviorTree=[BehaviorTree] ('<' typeParms+=TypeParm (',' typeParms+=TypeParm)* '>')? 
     '(' 
     (parameters+=Assignment (',' parameters+=Assignment)*)? 

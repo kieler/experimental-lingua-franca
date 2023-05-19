@@ -206,7 +206,7 @@ public class BehaviorTreeDiagrams extends AbstractSynthesisExtensions {
                 break;
             case PARALLEL:
                 figure = _kRenderingExtensions.addRectangle(node);
-                addLabel(figure, "||");
+                addLabel(figure, "\u21c9");
                 break;
             case SEQUENCE:
                 figure = _kRenderingExtensions.addRectangle(node);
