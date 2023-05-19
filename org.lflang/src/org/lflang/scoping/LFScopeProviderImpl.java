@@ -175,11 +175,15 @@ public class LFScopeProviderImpl extends AbstractLFScopeProvider {
     protected IScope getScopeForAssignment(Assignment assignment, EReference reference) {
 
         if (reference == LfPackage.Literals.ASSIGNMENT__LHS) {
-            var defn = toDefinition(((Instantiation) assignment.eContainer()).getReactorClass());
-            if (defn != null) {
-                return Scopes.scopeFor(allParameters(defn));
+            var target = ((Instantiation) assignment.eContainer()).getReactorClass();
+            if (target instanceof BehaviorTree bt) {
+                return Scopes.scopeFor(bt.getParameters());
+            } else {
+                var defn = toDefinition(target);
+                if (defn != null) {
+                    return Scopes.scopeFor(allParameters(defn));
+                }
             }
-
         }
         if (reference == LfPackage.Literals.ASSIGNMENT__RHS) {
             return Scopes.scopeFor(((Reactor) assignment.eContainer().eContainer()).getParameters());

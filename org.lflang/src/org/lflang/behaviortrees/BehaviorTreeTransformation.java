@@ -54,6 +54,7 @@ import org.lflang.lf.Local;
 import org.lflang.lf.Model;
 import org.lflang.lf.Output;
 import org.lflang.lf.Parallel;
+import org.lflang.lf.Parameter;
 import org.lflang.lf.Port;
 import org.lflang.lf.Reactor;
 import org.lflang.lf.Sequence;
@@ -139,6 +140,7 @@ public class BehaviorTreeTransformation {
     private int nodeNameCounter = 0;
     private HashMap<BehaviorTree, Reactor> bTreeCache = new HashMap<>();
     private List<Reactor> newReactors = new ArrayList<>();
+    private List<Parameter> currentParameters = new ArrayList<>();
 
     private void transformAll(Model lfModel) {
         var transformed = new HashMap<BehaviorTree, Reactor>();
@@ -153,8 +155,9 @@ public class BehaviorTreeTransformation {
                 Iterators.filter(lfModel.eAllContents(), Instantiation.class));
         for (var i : instantiations) {
             if (transformed.containsKey(i.getReactorClass())) {
+                var reactor = transformed.get(i.getReactorClass());
                 // Replace BT by Reactor
-                i.setReactorClass(transformed.get(i.getReactorClass()));
+                i.setReactorClass(reactor);
                 // Change VarRefs to Port in reactor instead of BT
                 var container = (Reactor) i.eContainer();
                 var varRefs = Lists.newArrayList(Iterators
@@ -164,6 +167,14 @@ public class BehaviorTreeTransformation {
                         v.setVariable(createRef((Reactor) i.getReactorClass(),
                                 i, v.getVariable().getName()).getVariable());
                     }
+                }
+                // Change parameter assignments to reactor
+                var newParams = new HashMap<String, Parameter>();
+                for (var p : reactor.getParameters()) {
+                    newParams.put(p.getName(), p);
+                }
+                for (var asm : i.getParameters()) {
+                    asm.setLhs(newParams.get(asm.getLhs().getName()));
                 }
             }
         }
@@ -192,12 +203,18 @@ public class BehaviorTreeTransformation {
         // Name and rendering annotation
         reactor.setName(bt.getName());
         addBTNodeAnnotation(reactor, NodeType.ROOT.toString());
+        
+        // Copy all parameters from BT. 
+        for (var param : bt.getParameters()) {
+            reactor.getParameters().add(EcoreUtil.copy(param));
+        }
+        currentParameters = reactor.getParameters();
 
         // Copy all inputs and outputs from BT. 
-        for (Input input : bt.getInputs()) {
+        for (var input : bt.getInputs()) {
             reactor.getInputs().add(EcoreUtil.copy(input));
         }
-        for (Output output : bt.getOutputs()) {
+        for (var output : bt.getOutputs()) {
             reactor.getOutputs().add(EcoreUtil.copy(output));
         }
         
@@ -251,6 +268,9 @@ public class BehaviorTreeTransformation {
             setLabelAndName(reactor, node, type);
             addBTNodeAnnotation(reactor, type.toString());
             
+            // Copy parameters
+            currentParameters.stream().map(EcoreUtil::copy).forEachOrdered(reactor.getParameters()::add);
+            
             // Create instance
             var instance = LFF.createInstantiation();
             instance.setReactorClass(reactor);
@@ -268,6 +288,9 @@ public class BehaviorTreeTransformation {
                     var transformedChild = transformNode(cnode.getNodes().get(i), "child" + i);
                     reactor.getInstantiations().add(transformedChild.instance);
                     children.add(transformedChild);
+                    
+                    // Forward parameters
+                    addParameterForwarding(reactor, transformedChild.instance);
                 }
                 
                 if (!children.isEmpty()) {
@@ -444,6 +467,30 @@ public class BehaviorTreeTransformation {
         fail.setName(FAILURE);
         fail.setPure(true);
         reactor.getOutputs().add(fail);
+    }
+    
+
+    /**
+     * Adds parameter assignments to the instantiation to forward parameters.
+     * 
+     * @param reactor parent reactor
+     * @param instance
+     */
+    private void addParameterForwarding(Reactor reactor, Instantiation instance) {
+        for (int i = 0; i < reactor.getParameters().size(); i++) { // Assumes same size of both parameter lists!
+            var param = reactor.getParameters().get(i);
+            
+            var asm = LFF.createAssignment();
+            asm.setLhs(param);
+            
+            var init = LFF.createInitializer();
+            var paramRef = LFF.createParameterReference();
+            paramRef.setParameter(((Reactor) instance.getReactorClass()).getParameters().get(i));
+            init.getExprs().add(paramRef);
+            asm.setRhs(init);
+            
+            instance.getParameters().add(asm);
+        }
     }
     
     /**
