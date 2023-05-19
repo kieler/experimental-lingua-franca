@@ -495,8 +495,8 @@ public abstract class GeneratorBase extends AbstractLFValidator {
                                 || c.getLeftPorts().size() > 1 
                                 || c.getRightPorts().size() > 1) {
                             errorReporter.reportError(c, "Cannot yet handle connections to pure ports that are not defined as simple one-to-one connections.");
-                        } else if (c.getLeftPorts().stream().anyMatch(p -> p.getContainer().getWidthSpec() != null)
-                                || c.getRightPorts().stream().anyMatch(p -> p.getContainer().getWidthSpec() != null)) {
+                        } else if (c.getLeftPorts().stream().anyMatch(p -> p.getContainer() != null && p.getContainer().getWidthSpec() != null)
+                                || c.getRightPorts().stream().anyMatch(p -> p.getContainer() != null && p.getContainer().getWidthSpec() != null)) {
                             errorReporter.reportError(c, "Cannot yet handle connections to pure ports on banks of reacotor.");
                         } else {
                             var destRef = c.getRightPorts().get(0);
