@@ -130,7 +130,7 @@ BehaviorTree:
 ;
 
 Local:
-    (attributes+=Attribute)* pure?='pure'? 'local' (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'?
+    (attributes+=Attribute)* pure?='pure'? ('local'|'channel') (widthSpec=WidthSpec)? name=ID (':' type=Type)? ';'? // TODO removed old keyword (local)!
 ;
 
 BehaviorTreeNode:
