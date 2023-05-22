@@ -371,7 +371,6 @@ public class BehaviorTreeTransformation {
                 result.inputs.put((Input) portCopy, input);
             } else if (port instanceof Local local) {
                 portCopy = transformToInput(local);
-                portCopy.setName(portCopy.getName() + "_IN");
                 reactor.getInputs().add((Input) portCopy);
                 result.localsIn.put((Input) portCopy, local);
             } else {
@@ -388,10 +387,8 @@ public class BehaviorTreeTransformation {
                 portCopy = EcoreUtil.copy(output);
                 reactor.getOutputs().add((Output) portCopy);
                 result.outputs.put((Output) portCopy, output);
-                
             } else if (port instanceof Local local) {
                 portCopy = transformToOutput(local);
-                portCopy.setName(portCopy.getName() + "_OUT");
                 reactor.getOutputs().add((Output) portCopy);
                 result.localsOut.put((Output) portCopy, local);
             } else {
