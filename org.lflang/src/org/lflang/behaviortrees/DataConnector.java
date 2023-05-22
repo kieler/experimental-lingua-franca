@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.xtext.resource.IFragmentProvider.Fallback;
 import org.lflang.lf.BehaviorTree;
+import org.lflang.lf.BehaviorTreeCompoundNode;
 import org.lflang.lf.LfFactory;
 import org.lflang.lf.Output;
 import org.lflang.lf.Reactor;
@@ -178,6 +179,54 @@ class DataConnector {
         
         // Locals
         // => Complicated
+        
+        // Channels
+        
+        // FIXME Quick and dirty version to make forward communication work for our example
+        if (node.node instanceof BehaviorTreeCompoundNode btNode) {
+            for (var child : children) {
+                for (var port : child.localsOut.keySet()) {
+                    var local = child.localsOut.get(port);
+                    if (btNode.getLocals().contains(local)) {
+                        for (var other : children) {
+                            if (other.localsIn.containsValue(local)) {
+                                // Connect to reader
+                                node.reactor.getConnections().add(
+                                        connect(child.reactor, child.instance, port.getName(), 
+                                                other.reactor, other.instance, other.localsIn.entrySet().stream().filter(
+                                                        entry -> entry.getValue() == local).findFirst().get().getKey().getName()));
+                            }
+                        }
+                    } else {
+                        // If node has no port that mirrors the original port mirrored by the child
+                        if (!node.localsOut.containsValue(local)) {
+                            // Propagate port to parent for forwarding
+                            var portCopy = EcoreUtil.copy(port);
+                            node.reactor.getOutputs().add(portCopy);
+                            node.localsOut.put(portCopy, local);
+                        }
+                        // Forward port
+                        node.reactor.getConnections().add(
+                                connect(child.reactor, child.instance, port.getName(), node.reactor, null, port.getName()));
+                    }
+                }
+                for (var port : child.localsIn.keySet()) {
+                    var local = child.localsIn.get(port);
+                    if (!btNode.getLocals().contains(local)) {
+                        // If node has no port that mirrors the original port mirrored by the child
+                        if (!node.localsIn.containsValue(local)) {
+                            // Propagate port to parent for forwarding
+                            var portCopy = EcoreUtil.copy(port);
+                            node.reactor.getInputs().add(portCopy);
+                            node.localsIn.put(portCopy, local);
+                        }
+                        // Forward port
+                        node.reactor.getConnections().add(
+                                connect(node.reactor, null, port.getName(), child.reactor, child.instance, port.getName()));
+                    }
+                }
+            }
+        }
         
     }
 
