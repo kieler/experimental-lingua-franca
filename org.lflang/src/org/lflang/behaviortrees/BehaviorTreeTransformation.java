@@ -237,6 +237,9 @@ public class BehaviorTreeTransformation {
     
             // Forward in and outputs port to root node
             connector.connectRootIO(bt, reactor, child);
+            
+            // Forward parameters
+            addParameterForwarding(reactor, childInstance);
         }
         
         if (INFER_RUNNING) {
@@ -478,11 +481,11 @@ public class BehaviorTreeTransformation {
             var param = reactor.getParameters().get(i);
             
             var asm = LFF.createAssignment();
-            asm.setLhs(param);
+            asm.setLhs(((Reactor) instance.getReactorClass()).getParameters().get(i));
             
             var init = LFF.createInitializer();
             var paramRef = LFF.createParameterReference();
-            paramRef.setParameter(((Reactor) instance.getReactorClass()).getParameters().get(i));
+            paramRef.setParameter(param);
             init.getExprs().add(paramRef);
             asm.setRhs(init);
             
