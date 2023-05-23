@@ -73,7 +73,7 @@ import com.google.common.collect.Lists;
 public class BehaviorTreeTransformation {
 
     public static void transform(Model lfModel, Target target) {
-        new BehaviorTreeTransformation(null).transformAll(lfModel);
+        new BehaviorTreeTransformation(target).transformAll(lfModel);
     }
 
     public static Reactor transformVirtual(BehaviorTree bt) {
