@@ -137,7 +137,7 @@ public class BehaviorTreeTransformation {
 
     private final CodeGenerator codeGenerator;
     private final DataConnector connector;
-    private int nodeNameCounter = 0;
+    private HashMap<NodeType, Integer> nodeNameCounter = new HashMap<>();
     private HashMap<BehaviorTree, Reactor> bTreeCache = new HashMap<>();
     private List<Reactor> newReactors = new ArrayList<>();
     private List<Parameter> currentParameters = new ArrayList<>();
@@ -431,9 +431,15 @@ public class BehaviorTreeTransformation {
      * @param type
      */
     private void setLabelAndName(Reactor reactor, BehaviorTreeNode node, NodeType type) {
+        var nameId = 0;
+        if (nodeNameCounter.containsKey(type)) {
+            nameId = nodeNameCounter.get(type);
+            nameId++;
+        }
+        nodeNameCounter.put(type, nameId);
         var name = node.getName() != null && !node.getName().isEmpty()
                 ? node.getName()
-                : type.getRactorName() + nodeNameCounter++;
+                : type.getRactorName() + nameId;
         reactor.setName(name);
         
         // Add label as reactor label attribute

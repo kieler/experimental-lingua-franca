@@ -38,7 +38,7 @@ public class BehaviorTrees {
         
         public String getRactorName() {
             switch (this) {
-                case ACTION: return "Action";
+                case ACTION: return "Task";
                 case CONDITION: return "Condition";
                 case FALLBACK: return "Fallback";
                 case PARALLEL: return "Parallel";
